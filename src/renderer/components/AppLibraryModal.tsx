@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
-  const { data, getAppLibrary, saveTool } = useApp();
+  const { data, getAppLibrary, saveTool, showToast } = useApp();
   const [entries, setEntries] = React.useState<AppLibraryEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [query, setQuery] = React.useState('');
@@ -31,11 +31,19 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
   if (!data) return null;
 
   const categories = data.categories.filter(category => category.id !== 'all');
+  const existingAppPaths = new Set(
+    data.tools.filter(tool => tool.type === 'app').map(tool => tool.path)
+  );
   const filtered = entries.filter(entry =>
     !query.trim() || entry.name.toLowerCase().includes(query.trim().toLowerCase())
   );
 
   const addApp = async (entry: AppLibraryEntry) => {
+    if (existingAppPaths.has(entry.path)) {
+      showToast('info', `"${entry.name}" 已经在 LaunchBox 中`);
+      return;
+    }
+
     setAddingIds(current => [...current, entry.id]);
 
     const tool: Tool = {
@@ -111,10 +119,10 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
                     <button
                       className="btn btn-secondary"
                       onClick={() => { void addApp(entry); }}
-                      disabled={adding}
+                      disabled={adding || existingAppPaths.has(entry.path)}
                       style={{ whiteSpace: 'nowrap' }}
                     >
-                      {adding ? '添加中...' : '添加'}
+                      {adding ? '添加中...' : existingAppPaths.has(entry.path) ? '已添加' : '添加'}
                     </button>
                   </div>
                 );

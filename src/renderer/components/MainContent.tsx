@@ -14,7 +14,7 @@ const BATCH_COLORS = [
 ];
 
 export default function MainContent() {
-  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory, updateToolsColor, saveTool } = useApp();
+  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory, updateToolsColor, saveTool, showToast } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
   const [showAppLibrary, setShowAppLibrary] = useState(false);
@@ -237,11 +237,19 @@ export default function MainContent() {
 
   const importDroppedFiles = async (items: string[]) => {
     const categoryId = selectedCategoryId === 'all' ? 'misc' : selectedCategoryId;
+    const existingKeys = new Set(data.tools.map(tool => `${tool.type}:${tool.path}`));
+    let skipped = 0;
 
     for (const item of items) {
       const type = item.startsWith('http://') || item.startsWith('https://')
         ? 'url'
         : inferToolType(item);
+      const key = `${type}:${item}`;
+
+      if (existingKeys.has(key)) {
+        skipped += 1;
+        continue;
+      }
 
       await saveTool({
         id: '',
@@ -255,6 +263,11 @@ export default function MainContent() {
         useCount: 0,
         createdAt: Date.now(),
       });
+      existingKeys.add(key);
+    }
+
+    if (skipped > 0) {
+      showToast('info', `已跳过 ${skipped} 个重复条目`);
     }
   };
 
