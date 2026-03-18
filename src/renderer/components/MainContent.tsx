@@ -1,16 +1,22 @@
 import React, { useMemo, useState } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
+import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import ToolCard from './ToolCard';
 import ToolModal from './ToolModal';
 
 type SortKey = 'name' | 'lastUsed' | 'useCount' | 'createdAt';
 
 export default function MainContent() {
-  const { data, selectedCategoryId, searchQuery, launchTool } = useApp();
+  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
+  const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
+  const [lastSelectedToolId, setLastSelectedToolId] = useState<string | null>(null);
+  const [moveTargetCategoryId, setMoveTargetCategoryId] = useState<string>('');
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -71,9 +77,134 @@ export default function MainContent() {
   const categoryName = selectedCategoryId === 'all'
     ? '全部工具'
     : data.categories.find(c => c.id === selectedCategoryId)?.name ?? '工具';
+  const filteredToolIds = filtered.map(tool => tool.id);
+  const selectedSet = new Set(selectedToolIds);
+  const selectedTools = filtered.filter(tool => selectedSet.has(tool.id));
+  const nonAllCategories = data.categories.filter(category => category.id !== 'all');
+
+  const clearSelection = () => {
+    setSelectedToolIds([]);
+    setLastSelectedToolId(null);
+  };
+
+  const handleSelectTool = (event: React.MouseEvent, tool: Tool) => {
+    const isMeta = event.metaKey || event.ctrlKey;
+    const isShift = event.shiftKey;
+
+    if (isShift && lastSelectedToolId) {
+      const startIndex = filteredToolIds.indexOf(lastSelectedToolId);
+      const endIndex = filteredToolIds.indexOf(tool.id);
+      if (startIndex >= 0 && endIndex >= 0) {
+        const [from, to] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+        const rangeIds = filteredToolIds.slice(from, to + 1);
+        setSelectedToolIds(Array.from(new Set([...selectedToolIds, ...rangeIds])));
+        return;
+      }
+    }
+
+    if (isMeta) {
+      setSelectedToolIds(current =>
+        current.includes(tool.id) ? current.filter(id => id !== tool.id) : [...current, tool.id]
+      );
+      setLastSelectedToolId(tool.id);
+      return;
+    }
+
+    setSelectedToolIds([tool.id]);
+    setLastSelectedToolId(tool.id);
+  };
+
+  const launchSelectedTools = async () => {
+    for (const toolId of selectedToolIds) {
+      await launchTool(toolId);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedToolIds.length === 0) return;
+    if (!confirm(`确认删除选中的 ${selectedToolIds.length} 个工具？`)) return;
+    await deleteTools(selectedToolIds);
+    clearSelection();
+  };
+
+  const handleMoveSelected = async () => {
+    if (!moveTargetCategoryId || selectedToolIds.length === 0) return;
+    await moveToolsToCategory(selectedToolIds, moveTargetCategoryId);
+    clearSelection();
+    setMoveTargetCategoryId('');
+  };
+
+  const buildBatchContextMenuItems = (): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      { label: `启动选中项 (${selectedToolIds.length})`, icon: '▶', onClick: () => { void launchSelectedTools(); } },
+      { label: '清除选择', icon: '✕', onClick: clearSelection },
+      { divider: true, label: 'divider-1' },
+    ];
+
+    nonAllCategories.forEach(category => {
+      items.push({
+        label: `移动到 ${category.name}`,
+        icon: category.icon,
+        onClick: () => { void moveToolsToCategory(selectedToolIds, category.id).then(clearSelection); },
+      });
+    });
+
+    items.push(
+      { divider: true, label: 'divider-2' },
+      { label: '删除选中项', icon: '🗑️', danger: true, onClick: () => { void handleDeleteSelected(); } }
+    );
+
+    return items;
+  };
+
+  const quickAddItems: ContextMenuItem[] = [
+    {
+      label: '添加工具',
+      icon: '+',
+      onClick: () => setNewToolPreset({ categoryId: selectedCategoryId === 'all' ? 'misc' : selectedCategoryId }),
+    },
+    {
+      label: '添加 App',
+      icon: '📱',
+      onClick: () => setNewToolPreset({
+        type: 'app',
+        categoryId: selectedCategoryId === 'all' ? 'misc' : selectedCategoryId,
+      }),
+    },
+    {
+      label: '添加网址',
+      icon: '🌐',
+      onClick: () => setNewToolPreset({
+        type: 'url',
+        categoryId: selectedCategoryId === 'all' ? 'misc' : selectedCategoryId,
+      }),
+    },
+    {
+      label: '添加脚本',
+      icon: '💻',
+      onClick: () => setNewToolPreset({
+        type: 'shell',
+        categoryId: selectedCategoryId === 'all' ? 'misc' : selectedCategoryId,
+      }),
+    },
+    { divider: true, label: 'divider-quick' },
+    {
+      label: selectedToolIds.length > 0 ? `清除选择 (${selectedToolIds.length})` : '暂无批量操作',
+      icon: '✕',
+      disabled: selectedToolIds.length === 0,
+      onClick: clearSelection,
+    },
+  ];
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      onClick={event => {
+        const target = event.target as HTMLElement;
+        if (target.closest('[data-tool-card="true"]') || target.closest('.context-menu')) return;
+        if (selectedToolIds.length > 0) clearSelection();
+      }}
+    >
       {/* Toolbar */}
       <div style={{
         display: 'flex',
@@ -130,8 +261,65 @@ export default function MainContent() {
         </div>
       </div>
 
+      {selectedToolIds.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 20px',
+          borderBottom: '1px solid var(--border-color)',
+          background: 'var(--bg-secondary)',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            已选中 {selectedToolIds.length} 项
+          </span>
+          <button className="btn btn-secondary" onClick={() => { void launchSelectedTools(); }}>
+            ▶ 启动选中项
+          </button>
+          <select
+            className="input"
+            value={moveTargetCategoryId}
+            onChange={event => setMoveTargetCategoryId(event.target.value)}
+            style={{ width: 180 }}
+          >
+            <option value="">移动到分类...</option>
+            {nonAllCategories.map(category => (
+              <option key={category.id} value={category.id}>
+                {category.icon} {category.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn btn-secondary"
+            onClick={() => { void handleMoveSelected(); }}
+            disabled={!moveTargetCategoryId}
+          >
+            移动
+          </button>
+          <button className="btn btn-danger" onClick={() => { void handleDeleteSelected(); }}>
+            删除选中项
+          </button>
+          <button className="btn btn-ghost" onClick={clearSelection}>
+            清除选择
+          </button>
+        </div>
+      )}
+
       {/* Cards grid */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '20px' }}
+        onContextMenu={event => {
+          const target = event.target as HTMLElement;
+          if (target.closest('[data-tool-card="true"]')) return;
+          event.preventDefault();
+          setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            items: selectedToolIds.length > 0 ? buildBatchContextMenuItems() : quickAddItems,
+          });
+        }}
+      >
         {filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🔧</div>
@@ -159,6 +347,27 @@ export default function MainContent() {
                 tool={tool}
                 size={cardSize}
                 onEdit={t => setEditingTool(t)}
+                selected={selectedSet.has(tool.id)}
+                onSelect={handleSelectTool}
+                onRequestContextMenu={(event, targetTool) => {
+                  const currentIsSelected = selectedSet.has(targetTool.id);
+                  if (selectedToolIds.length > 1 && currentIsSelected) {
+                    event.preventDefault();
+                    setContextMenu({
+                      x: event.clientX,
+                      y: event.clientY,
+                      items: buildBatchContextMenuItems(),
+                    });
+                    return true;
+                  }
+
+                  if (selectedToolIds.length > 0 && !currentIsSelected) {
+                    setSelectedToolIds([targetTool.id]);
+                    setLastSelectedToolId(targetTool.id);
+                  }
+
+                  return false;
+                }}
               />
             ))}
           </div>
@@ -169,6 +378,22 @@ export default function MainContent() {
         <ToolModal
           tool={editingTool}
           onClose={() => setEditingTool(undefined)}
+        />
+      )}
+
+      {newToolPreset && (
+        <ToolModal
+          initialValues={newToolPreset}
+          onClose={() => setNewToolPreset(null)}
+        />
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
         />
       )}
     </div>

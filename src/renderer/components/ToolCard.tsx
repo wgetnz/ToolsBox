@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
+import ContextMenu, { ContextMenuItem } from './ContextMenu';
 
 const TYPE_LABELS: Record<string, string> = {
   jar: 'JAR',
@@ -41,9 +42,19 @@ interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
   onEdit: (tool: Tool) => void;
+  selected?: boolean;
+  onSelect?: (event: React.MouseEvent, tool: Tool) => void;
+  onRequestContextMenu?: (event: React.MouseEvent, tool: Tool) => boolean | void;
 }
 
-export default function ToolCard({ tool, size, onEdit }: Props) {
+export default function ToolCard({
+  tool,
+  size,
+  onEdit,
+  selected = false,
+  onSelect,
+  onRequestContextMenu,
+}: Props) {
   const { launchTool, deleteTool, openInTerminal, showInFinder } = useApp();
   const [hover, setHover] = useState(false);
   const [launching, setLaunching] = useState(false);
@@ -68,11 +79,29 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    const handled = onRequestContextMenu?.(e, tool);
+    if (handled) return;
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY });
   };
 
   const closeContextMenu = () => setContextMenu(null);
+  const menuItems: ContextMenuItem[] = [
+    { label: '启动', icon: '▶', onClick: () => launchTool(tool.id) },
+    { label: '编辑', icon: '✏️', onClick: () => onEdit(tool) },
+  ];
+
+  if (tool.type !== 'url' && tool.type !== 'app') {
+    menuItems.push(
+      { label: '在终端中打开', icon: '💻', onClick: () => openInTerminal(tool.path) },
+      { label: '在访达中显示', icon: '📁', onClick: () => showInFinder(tool.path) }
+    );
+  }
+
+  menuItems.push(
+    { divider: true, label: 'divider' },
+    { label: '删除', icon: '🗑️', danger: true, onClick: () => deleteTool(tool.id) }
+  );
 
   return (
     <>
@@ -82,9 +111,11 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
         style={{
           width: dims.width,
           height: dims.height,
-          background: hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
+          background: selected ? `${accentColor}18` : hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
           borderRadius: 14,
-          border: `1px solid ${hover ? accentColor + '60' : 'var(--border-color)'}`,
+          border: `1px solid ${
+            selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'
+          }`,
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -94,12 +125,15 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
           padding: 12,
           position: 'relative',
           transition: 'all 0.15s ease',
-          boxShadow: hover ? `0 8px 24px ${accentColor}20` : 'none',
+          boxShadow: selected
+            ? `0 10px 28px ${accentColor}26`
+            : hover ? `0 8px 24px ${accentColor}20` : 'none',
           transform: hover ? 'translateY(-2px)' : 'none',
           overflow: 'hidden',
         }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
+        onClick={event => onSelect?.(event, tool)}
         onDoubleClick={handleLaunch}
         onContextMenu={handleContextMenu}
       >
@@ -129,6 +163,27 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
         }}>
           {TYPE_LABELS[tool.type]}
         </div>
+
+        {selected && (
+          <div style={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            width: 18,
+            height: 18,
+            borderRadius: 999,
+            background: accentColor,
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 0 0 2px ${accentColor}20`,
+          }}>
+            ✓
+          </div>
+        )}
 
         {/* Icon */}
         <div style={{
@@ -233,69 +288,10 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          tool={tool}
+          items={menuItems}
           onClose={closeContextMenu}
-          onEdit={() => { closeContextMenu(); onEdit(tool); }}
-          onLaunch={() => { closeContextMenu(); launchTool(tool.id); }}
-          onDelete={() => { closeContextMenu(); deleteTool(tool.id); }}
-          onOpenTerminal={() => { closeContextMenu(); openInTerminal(tool.path); }}
-          onShowInFinder={() => { closeContextMenu(); showInFinder(tool.path); }}
         />
       )}
     </>
-  );
-}
-
-function ContextMenu({
-  x, y, tool, onClose, onEdit, onLaunch, onDelete, onOpenTerminal, onShowInFinder,
-}: {
-  x: number; y: number; tool: Tool;
-  onClose: () => void;
-  onEdit: () => void;
-  onLaunch: () => void;
-  onDelete: () => void;
-  onOpenTerminal: () => void;
-  onShowInFinder: () => void;
-}) {
-  React.useEffect(() => {
-    const handler = () => onClose();
-    window.addEventListener('click', handler);
-    window.addEventListener('contextmenu', handler);
-    return () => {
-      window.removeEventListener('click', handler);
-      window.removeEventListener('contextmenu', handler);
-    };
-  }, [onClose]);
-
-  const menuHeight = 240;
-  const adjustedY = y + menuHeight > window.innerHeight ? y - menuHeight : y;
-
-  return (
-    <div
-      className="context-menu"
-      style={{ left: x, top: adjustedY }}
-      onClick={e => e.stopPropagation()}
-    >
-      <div className="context-menu-item" onClick={onLaunch}>
-        <span>▶</span> 启动
-      </div>
-      <div className="context-menu-item" onClick={onEdit}>
-        <span>✏️</span> 编辑
-      </div>
-      {tool.type !== 'url' && tool.type !== 'app' && (
-        <>
-          <div className="context-menu-item" onClick={onOpenTerminal}>
-            <span>💻</span> 在终端中打开
-          </div>
-          <div className="context-menu-item" onClick={onShowInFinder}>
-            <span>📁</span> 在访达中显示
-          </div>
-        </>
-      )}
-      <div className="context-menu-divider" />
-      <div className="context-menu-item danger" onClick={onDelete}>
-        <span>🗑️</span> 删除
-      </div>
-    </div>
   );
 }

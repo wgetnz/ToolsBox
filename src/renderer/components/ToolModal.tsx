@@ -20,10 +20,11 @@ const CARD_COLORS = [
 
 interface Props {
   tool?: Tool | null;
+  initialValues?: Partial<Tool>;
   onClose: () => void;
 }
 
-function emptyTool(): Partial<Tool> {
+function emptyTool(initialValues?: Partial<Tool>): Partial<Tool> {
   return {
     name: '',
     description: '',
@@ -34,17 +35,18 @@ function emptyTool(): Partial<Tool> {
     color: '#4f8ef7',
     useCount: 0,
     createdAt: Date.now(),
+    ...initialValues,
   };
 }
 
-export default function ToolModal({ tool, onClose }: Props) {
+export default function ToolModal({ tool, initialValues, onClose }: Props) {
   const { data, saveTool, selectFile } = useApp();
-  const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool());
+  const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool(initialValues));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setForm(tool ? { ...tool } : emptyTool());
-  }, [tool]);
+    setForm(tool ? { ...tool } : emptyTool(initialValues));
+  }, [tool, initialValues]);
 
   if (!data) return null;
 

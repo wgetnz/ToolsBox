@@ -172,6 +172,13 @@ function setupIPC(): void {
     return appData.tools;
   });
 
+  ipcMain.handle('delete-tools', (_event, toolIds: string[]) => {
+    const removeSet = new Set(toolIds);
+    appData.tools = appData.tools.filter(t => !removeSet.has(t.id));
+    saveData(appData);
+    return appData.tools;
+  });
+
   ipcMain.handle('save-category', (_event, category: Category) => {
     // Don't allow editing built-in "all" category
     if (!category.id || category.id === 'all') return appData.categories;
@@ -196,6 +203,15 @@ function setupIPC(): void {
     );
     saveData(appData);
     return { categories: appData.categories, tools: appData.tools };
+  });
+
+  ipcMain.handle('move-tools-to-category', (_event, toolIds: string[], categoryId: string) => {
+    const moveSet = new Set(toolIds);
+    appData.tools = appData.tools.map(tool =>
+      moveSet.has(tool.id) ? { ...tool, categoryId } : tool
+    );
+    saveData(appData);
+    return appData.tools;
   });
 
   ipcMain.handle('save-settings', (_event, settings: AppSettings) => {

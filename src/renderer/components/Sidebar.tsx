@@ -1,16 +1,32 @@
-import React, { useState } from 'react';
-import { Category } from '../../shared/types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Category, Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 import CategoryModal from './CategoryModal';
+import ContextMenu, { ContextMenuItem } from './ContextMenu';
+import ToolModal from './ToolModal';
 
 export default function Sidebar() {
   const { data, selectedCategoryId, selectCategory, searchQuery, setSearch } = useApp();
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    type: 'area' | 'category';
+    category?: Category;
+  } | null>(null);
+  const hoverTimerRef = useRef<number | null>(null);
 
   if (!data) return null;
 
   const { categories, tools } = data;
+
+  useEffect(() => () => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+  }, []);
 
   const getCount = (catId: string) => {
     if (catId === 'all') return tools.length;
@@ -23,6 +39,66 @@ export default function Sidebar() {
     .filter(t => t.lastUsed)
     .sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0))
     .slice(0, 5);
+
+  const openAddCategory = () => {
+    setEditingCategory(null);
+    setShowCategoryModal(true);
+  };
+
+  const openEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setShowCategoryModal(true);
+  };
+
+  const scheduleHoverSelect = (categoryId: string) => {
+    if (contextMenu) return;
+    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => {
+      selectCategory(categoryId);
+    }, 150);
+  };
+
+  const clearHoverSelect = () => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
+  const areaMenuItems: ContextMenuItem[] = [
+    { label: '添加分类', icon: '+', onClick: openAddCategory },
+    {
+      label: '新建工具到当前分类',
+      icon: '🔧',
+      onClick: () => setNewToolPreset({ categoryId: selectedCategoryId === 'all' ? 'misc' : selectedCategoryId }),
+    },
+    { divider: true, label: 'divider' },
+    { label: '切换到全部工具', icon: '📚', onClick: () => selectCategory('all') },
+  ];
+
+  const categoryMenuItems = (category: Category): ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [
+      {
+        label: `切换到 ${category.name}`,
+        icon: category.icon,
+        onClick: () => selectCategory(category.id),
+      },
+      {
+        label: '新建工具到此分类',
+        icon: '+',
+        onClick: () => setNewToolPreset({ categoryId: category.id === 'all' ? 'misc' : category.id }),
+      },
+    ];
+
+    if (category.id !== 'all') {
+      items.push(
+        { divider: true, label: 'divider' },
+        { label: '编辑分类', icon: '✏️', onClick: () => openEditCategory(category) }
+      );
+    }
+
+    return items;
+  };
 
   return (
     <div style={{
@@ -55,7 +131,16 @@ export default function Sidebar() {
       </div>
 
       {/* Categories */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}
+        onContextMenu={event => {
+          event.preventDefault();
+          const target = event.target as HTMLElement;
+          if (target.closest('[data-category-item="true"]')) return;
+          clearHoverSelect();
+          setContextMenu({ x: event.clientX, y: event.clientY, type: 'area' });
+        }}
+      >
         <div style={{
           fontSize: 11,
           fontWeight: 700,
@@ -72,10 +157,21 @@ export default function Sidebar() {
             count={getCount(cat.id)}
             selected={selectedCategoryId === cat.id}
             onClick={() => selectCategory(cat.id)}
+            onHover={() => scheduleHoverSelect(cat.id)}
+            onHoverEnd={clearHoverSelect}
             onEdit={cat.id !== 'all' ? () => {
-              setEditingCategory(cat);
-              setShowCategoryModal(true);
+              openEditCategory(cat);
             } : undefined}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              clearHoverSelect();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                type: 'category',
+                category: cat,
+              });
+            }}
           />
         ))}
 
@@ -138,6 +234,26 @@ export default function Sidebar() {
           onClose={() => setShowCategoryModal(false)}
         />
       )}
+
+      {newToolPreset && (
+        <ToolModal
+          initialValues={newToolPreset}
+          onClose={() => setNewToolPreset(null)}
+        />
+      )}
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={
+            contextMenu.type === 'category' && contextMenu.category
+              ? categoryMenuItems(contextMenu.category)
+              : areaMenuItems
+          }
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
@@ -147,18 +263,25 @@ function CategoryItem({
   count,
   selected,
   onClick,
+  onHover,
+  onHoverEnd,
   onEdit,
+  onContextMenu,
 }: {
   category: Category;
   count: number;
   selected: boolean;
   onClick: () => void;
+  onHover: () => void;
+  onHoverEnd: () => void;
   onEdit?: () => void;
+  onContextMenu: (event: React.MouseEvent) => void;
 }) {
   const [hover, setHover] = useState(false);
 
   return (
     <div
+      data-category-item="true"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -174,8 +297,15 @@ function CategoryItem({
         position: 'relative',
       }}
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onContextMenu={onContextMenu}
+      onMouseEnter={() => {
+        setHover(true);
+        onHover();
+      }}
+      onMouseLeave={() => {
+        setHover(false);
+        onHoverEnd();
+      }}
     >
       <span style={{ fontSize: 15 }}>{category.icon}</span>
       <span style={{ flex: 1 }}>{category.name}</span>

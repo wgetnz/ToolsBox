@@ -7,8 +7,10 @@ declare global {
       getData: () => Promise<AppData>;
       saveTool: (tool: Tool) => Promise<Tool[]>;
       deleteTool: (toolId: string) => Promise<Tool[]>;
+      deleteTools: (toolIds: string[]) => Promise<Tool[]>;
       saveCategory: (category: Category) => Promise<Category[]>;
       deleteCategory: (categoryId: string) => Promise<{ categories: Category[]; tools: Tool[] }>;
+      moveToolsToCategory: (toolIds: string[], categoryId: string) => Promise<Tool[]>;
       saveSettings: (settings: AppSettings) => Promise<AppSettings>;
       launchTool: (toolId: string) => Promise<{ success: boolean; error?: string }>;
       selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
@@ -73,8 +75,10 @@ function reducer(state: AppState, action: Action): AppState {
 interface AppContextValue extends AppState {
   saveTool: (tool: Tool) => Promise<void>;
   deleteTool: (toolId: string) => Promise<void>;
+  deleteTools: (toolIds: string[]) => Promise<void>;
   saveCategory: (category: Category) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
+  moveToolsToCategory: (toolIds: string[], categoryId: string) => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   launchTool: (toolId: string) => Promise<void>;
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
@@ -124,6 +128,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast('success', '工具已删除');
   }, [showToast]);
 
+  const deleteTools = useCallback(async (toolIds: string[]) => {
+    if (toolIds.length === 0) return;
+    const tools = await window.launchbox.deleteTools(toolIds);
+    dispatch({ type: 'SET_TOOLS', payload: tools });
+    showToast('success', `已删除 ${toolIds.length} 个工具`);
+  }, [showToast]);
+
   const saveCategory = useCallback(async (category: Category) => {
     const categories = await window.launchbox.saveCategory(category);
     dispatch({ type: 'SET_CATEGORIES', payload: categories });
@@ -136,6 +147,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_TOOLS', payload: result.tools });
     dispatch({ type: 'SELECT_CATEGORY', payload: 'all' });
     showToast('success', '分类已删除');
+  }, [showToast]);
+
+  const moveToolsToCategory = useCallback(async (toolIds: string[], categoryId: string) => {
+    if (toolIds.length === 0) return;
+    const tools = await window.launchbox.moveToolsToCategory(toolIds, categoryId);
+    dispatch({ type: 'SET_TOOLS', payload: tools });
+    showToast('success', `已移动 ${toolIds.length} 个工具`);
   }, [showToast]);
 
   const saveSettings = useCallback(async (settings: AppSettings) => {
@@ -183,8 +201,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...state,
       saveTool,
       deleteTool,
+      deleteTools,
       saveCategory,
       deleteCategory,
+      moveToolsToCategory,
       saveSettings,
       launchTool,
       selectFile,

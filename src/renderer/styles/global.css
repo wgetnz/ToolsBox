@@ -347,6 +347,15 @@ textarea.input {
   background: var(--bg-tertiary);
 }
 
+.context-menu-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+  background: transparent;
+}
+
 .context-menu-item.danger {
   color: var(--danger-color);
 }
