@@ -214,6 +214,15 @@ function setupIPC(): void {
     return appData.tools;
   });
 
+  ipcMain.handle('update-tools-color', (_event, toolIds: string[], color: string) => {
+    const updateSet = new Set(toolIds);
+    appData.tools = appData.tools.map(tool =>
+      updateSet.has(tool.id) ? { ...tool, color } : tool
+    );
+    saveData(appData);
+    return appData.tools;
+  });
+
   ipcMain.handle('save-settings', (_event, settings: AppSettings) => {
     appData.settings = { ...appData.settings, ...settings };
     saveData(appData);

@@ -7,8 +7,13 @@ import ToolModal from './ToolModal';
 
 type SortKey = 'name' | 'lastUsed' | 'useCount' | 'createdAt';
 
+const BATCH_COLORS = [
+  '#4f8ef7', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+  '#1abc9c', '#3498db', '#e67e22', '#e91e63', '#00bcd4',
+];
+
 export default function MainContent() {
-  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory } = useApp();
+  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory, updateToolsColor } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -132,6 +137,10 @@ export default function MainContent() {
     await moveToolsToCategory(selectedToolIds, moveTargetCategoryId);
     clearSelection();
     setMoveTargetCategoryId('');
+  };
+
+  const handleRecolorSelected = async (color: string) => {
+    await updateToolsColor(selectedToolIds, color);
   };
 
   const buildBatchContextMenuItems = (): ContextMenuItem[] => {
@@ -297,6 +306,27 @@ export default function MainContent() {
           >
             移动
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>批量改色</span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {BATCH_COLORS.map(color => (
+                <button
+                  key={color}
+                  onClick={() => { void handleRecolorSelected(color); }}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: color,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                  title={`改成 ${color}`}
+                />
+              ))}
+            </div>
+          </div>
           <button className="btn btn-danger" onClick={() => { void handleDeleteSelected(); }}>
             删除选中项
           </button>

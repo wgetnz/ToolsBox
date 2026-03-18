@@ -63,6 +63,7 @@ export type IpcChannel =
   | 'save-category'
   | 'delete-category'
   | 'move-tools-to-category'
+  | 'update-tools-color'
   | 'save-settings'
   | 'get-settings'
   | 'select-file'

@@ -11,6 +11,7 @@ declare global {
       saveCategory: (category: Category) => Promise<Category[]>;
       deleteCategory: (categoryId: string) => Promise<{ categories: Category[]; tools: Tool[] }>;
       moveToolsToCategory: (toolIds: string[], categoryId: string) => Promise<Tool[]>;
+      updateToolsColor: (toolIds: string[], color: string) => Promise<Tool[]>;
       saveSettings: (settings: AppSettings) => Promise<AppSettings>;
       launchTool: (toolId: string) => Promise<{ success: boolean; error?: string }>;
       selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
@@ -79,6 +80,7 @@ interface AppContextValue extends AppState {
   saveCategory: (category: Category) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   moveToolsToCategory: (toolIds: string[], categoryId: string) => Promise<void>;
+  updateToolsColor: (toolIds: string[], color: string) => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   launchTool: (toolId: string) => Promise<void>;
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
@@ -156,6 +158,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast('success', `已移动 ${toolIds.length} 个工具`);
   }, [showToast]);
 
+  const updateToolsColor = useCallback(async (toolIds: string[], color: string) => {
+    if (toolIds.length === 0) return;
+    const tools = await window.launchbox.updateToolsColor(toolIds, color);
+    dispatch({ type: 'SET_TOOLS', payload: tools });
+    showToast('success', `已更新 ${toolIds.length} 个工具的颜色`);
+  }, [showToast]);
+
   const saveSettings = useCallback(async (settings: AppSettings) => {
     const saved = await window.launchbox.saveSettings(settings);
     dispatch({ type: 'SET_SETTINGS', payload: saved });
@@ -205,6 +214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveCategory,
       deleteCategory,
       moveToolsToCategory,
+      updateToolsColor,
       saveSettings,
       launchTool,
       selectFile,
