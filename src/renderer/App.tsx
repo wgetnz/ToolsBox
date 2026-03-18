@@ -7,12 +7,14 @@ import ToolModal from './components/ToolModal';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
 import AppLibraryModal from './components/AppLibraryModal';
+import QuickLauncherModal from './components/QuickLauncherModal';
 
 export default function App() {
   const { data } = useApp();
   const [showAddTool, setShowAddTool] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAppLibrary, setShowAppLibrary] = useState(false);
+  const [showQuickLauncher, setShowQuickLauncher] = useState(false);
 
   // Apply theme and settings to document
   useEffect(() => {
@@ -30,6 +32,18 @@ export default function App() {
       document.documentElement.style.removeProperty('--bg-primary');
     }
   }, [data?.settings]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setShowQuickLauncher(open => !open);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   if (!data) {
     return (
@@ -72,6 +86,24 @@ export default function App() {
         <AppLibraryModal
           defaultCategoryId="misc"
           onClose={() => setShowAppLibrary(false)}
+        />
+      )}
+
+      {showQuickLauncher && (
+        <QuickLauncherModal
+          onClose={() => setShowQuickLauncher(false)}
+          onAddTool={() => {
+            setShowQuickLauncher(false);
+            setShowAddTool(true);
+          }}
+          onOpenSettings={() => {
+            setShowQuickLauncher(false);
+            setShowSettings(true);
+          }}
+          onOpenAppLibrary={() => {
+            setShowQuickLauncher(false);
+            setShowAppLibrary(true);
+          }}
         />
       )}
 
