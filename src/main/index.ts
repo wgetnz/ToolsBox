@@ -17,6 +17,40 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
 
+async function resolveToolIcon(tool: Tool): Promise<Tool> {
+  if (tool.type !== 'app' || !tool.path) return tool;
+
+  try {
+    if (!fs.existsSync(tool.path)) return tool;
+    const icon = await app.getFileIcon(tool.path, { size: 'large' });
+    const dataUrl = icon.toDataURL();
+    if (!dataUrl) return tool;
+    return { ...tool, icon: dataUrl };
+  } catch {
+    return tool;
+  }
+}
+
+async function ensureToolIcons(tools: Tool[]): Promise<Tool[]> {
+  let changed = false;
+
+  const resolved = await Promise.all(
+    tools.map(async tool => {
+      if (tool.type !== 'app' || tool.icon || !tool.path) return tool;
+      const nextTool = await resolveToolIcon(tool);
+      if (nextTool.icon && nextTool.icon !== tool.icon) changed = true;
+      return nextTool;
+    })
+  );
+
+  if (changed) {
+    appData.tools = resolved;
+    saveData(appData);
+  }
+
+  return resolved;
+}
+
 function createWindow(): void {
   const { windowBounds } = appData.settings;
 
@@ -107,20 +141,25 @@ function createTray(): void {
 
 // IPC handlers
 function setupIPC(): void {
-  ipcMain.handle('get-data', () => appData);
+  ipcMain.handle('get-data', async () => ({
+    ...appData,
+    tools: await ensureToolIcons(appData.tools),
+  }));
 
-  ipcMain.handle('save-tool', (_event, tool: Tool) => {
+  ipcMain.handle('save-tool', async (_event, tool: Tool) => {
+    const resolvedTool = await resolveToolIcon(tool);
+
     if (!tool.id) {
-      tool.id = createId();
-      tool.createdAt = Date.now();
-      tool.useCount = 0;
-      appData.tools.push(tool);
+      resolvedTool.id = createId();
+      resolvedTool.createdAt = Date.now();
+      resolvedTool.useCount = 0;
+      appData.tools.push(resolvedTool);
     } else {
-      const idx = appData.tools.findIndex(t => t.id === tool.id);
+      const idx = appData.tools.findIndex(t => t.id === resolvedTool.id);
       if (idx >= 0) {
-        appData.tools[idx] = tool;
+        appData.tools[idx] = resolvedTool;
       } else {
-        appData.tools.push(tool);
+        appData.tools.push(resolvedTool);
       }
     }
     saveData(appData);

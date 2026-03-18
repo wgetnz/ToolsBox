@@ -51,6 +51,7 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
 
   const accentColor = tool.color || TYPE_COLORS[tool.type] || '#4f8ef7';
+  const hasCustomIcon = Boolean(tool.icon);
 
   const dims = {
     small: { width: 140, height: 110, iconSize: 28, nameFontSize: 12 },
@@ -77,6 +78,7 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
     <>
       <div
         ref={cardRef}
+        data-tool-card="true"
         style={{
           width: dims.width,
           height: dims.height,
@@ -140,8 +142,21 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
           fontSize: dims.iconSize,
           transition: 'transform 0.15s',
           transform: hover ? 'scale(1.05)' : 'scale(1)',
+          overflow: 'hidden',
         }}>
-          {TYPE_ICONS[tool.type]}
+          {hasCustomIcon ? (
+            <img
+              src={tool.icon}
+              alt={tool.name}
+              style={{
+                width: dims.iconSize + 6,
+                height: dims.iconSize + 6,
+                objectFit: 'contain',
+              }}
+            />
+          ) : (
+            TYPE_ICONS[tool.type]
+          )}
         </div>
 
         {/* Name */}
