@@ -36,9 +36,15 @@ function getDataPath(): string {
   return path.join(userDataPath, 'launchbox-data.json');
 }
 
+function backupCorruptedDataFile(dataPath: string): void {
+  const backupPath = `${dataPath}.corrupt-${Date.now()}.bak`;
+  fs.copyFileSync(dataPath, backupPath);
+}
+
 export function loadData(): AppData {
+  const dataPath = getDataPath();
+
   try {
-    const dataPath = getDataPath();
     if (fs.existsSync(dataPath)) {
       const raw = fs.readFileSync(dataPath, 'utf-8');
       const data = JSON.parse(raw) as Partial<AppData>;
@@ -50,6 +56,14 @@ export function loadData(): AppData {
     }
   } catch (e) {
     console.error('Failed to load data:', e);
+    try {
+      if (fs.existsSync(dataPath)) {
+        backupCorruptedDataFile(dataPath);
+        saveData({ ...defaultData, categories: [...defaultCategories] });
+      }
+    } catch (backupError) {
+      console.error('Failed to recover corrupted data file:', backupError);
+    }
   }
   return { ...defaultData, categories: [...defaultCategories] };
 }
