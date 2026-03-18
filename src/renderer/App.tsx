@@ -6,11 +6,13 @@ import MainContent from './components/MainContent';
 import ToolModal from './components/ToolModal';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
+import AppLibraryModal from './components/AppLibraryModal';
 
 export default function App() {
   const { data } = useApp();
   const [showAddTool, setShowAddTool] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAppLibrary, setShowAppLibrary] = useState(false);
 
   // Apply theme and settings to document
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function App() {
       <TitleBar
         onAddTool={() => setShowAddTool(true)}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenAppLibrary={() => setShowAppLibrary(true)}
       />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar />
@@ -63,6 +66,13 @@ export default function App() {
 
       {showSettings && (
         <SettingsPanel onClose={() => setShowSettings(false)} />
+      )}
+
+      {showAppLibrary && (
+        <AppLibraryModal
+          defaultCategoryId="misc"
+          onClose={() => setShowAppLibrary(false)}
+        />
       )}
 
       <Toast />

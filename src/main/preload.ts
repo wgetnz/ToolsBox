@@ -3,6 +3,7 @@ import { Tool, Category, AppSettings } from '../shared/types';
 
 const api = {
   getData: () => ipcRenderer.invoke('get-data'),
+  getAppLibrary: () => ipcRenderer.invoke('get-app-library'),
   saveTool: (tool: Tool) => ipcRenderer.invoke('save-tool', tool),
   deleteTool: (toolId: string) => ipcRenderer.invoke('delete-tool', toolId),
   deleteTools: (toolIds: string[]) => ipcRenderer.invoke('delete-tools', toolIds),

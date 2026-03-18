@@ -54,9 +54,17 @@ export interface AppData {
   settings: AppSettings;
 }
 
+export interface AppLibraryEntry {
+  id: string;
+  name: string;
+  path: string;
+  icon?: string;
+}
+
 export type IpcChannel =
   | 'launch-tool'
   | 'get-data'
+  | 'get-app-library'
   | 'save-tool'
   | 'delete-tool'
   | 'delete-tools'

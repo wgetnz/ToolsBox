@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback } from 'react';
-import { AppData, Tool, Category, AppSettings } from '../../shared/types';
+import { AppData, Tool, Category, AppSettings, AppLibraryEntry } from '../../shared/types';
 
 declare global {
   interface Window {
     launchbox: {
       getData: () => Promise<AppData>;
+      getAppLibrary: () => Promise<AppLibraryEntry[]>;
       saveTool: (tool: Tool) => Promise<Tool[]>;
       deleteTool: (toolId: string) => Promise<Tool[]>;
       deleteTools: (toolIds: string[]) => Promise<Tool[]>;
@@ -75,6 +76,7 @@ function reducer(state: AppState, action: Action): AppState {
 
 interface AppContextValue extends AppState {
   saveTool: (tool: Tool) => Promise<void>;
+  getAppLibrary: () => Promise<AppLibraryEntry[]>;
   deleteTool: (toolId: string) => Promise<void>;
   deleteTools: (toolIds: string[]) => Promise<void>;
   saveCategory: (category: Category) => Promise<void>;
@@ -123,6 +125,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_TOOLS', payload: tools });
     showToast('success', `工具 "${tool.name}" 已保存`);
   }, [showToast]);
+
+  const getAppLibrary = useCallback(() => window.launchbox.getAppLibrary(), []);
 
   const deleteTool = useCallback(async (toolId: string) => {
     const tools = await window.launchbox.deleteTool(toolId);
@@ -209,6 +213,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       ...state,
       saveTool,
+      getAppLibrary,
       deleteTool,
       deleteTools,
       saveCategory,

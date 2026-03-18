@@ -4,6 +4,7 @@ import { useApp } from '../store/AppContext';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import ToolCard from './ToolCard';
 import ToolModal from './ToolModal';
+import AppLibraryModal from './AppLibraryModal';
 
 type SortKey = 'name' | 'lastUsed' | 'useCount' | 'createdAt';
 
@@ -13,15 +14,17 @@ const BATCH_COLORS = [
 ];
 
 export default function MainContent() {
-  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory, updateToolsColor } = useApp();
+  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory, updateToolsColor, saveTool } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
+  const [showAppLibrary, setShowAppLibrary] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   const [lastSelectedToolId, setLastSelectedToolId] = useState<string | null>(null);
   const [moveTargetCategoryId, setMoveTargetCategoryId] = useState<string>('');
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -181,6 +184,11 @@ export default function MainContent() {
       }),
     },
     {
+      label: '从应用库添加',
+      icon: '📚',
+      onClick: () => setShowAppLibrary(true),
+    },
+    {
       label: '添加网址',
       icon: '🌐',
       onClick: () => setNewToolPreset({
@@ -205,6 +213,51 @@ export default function MainContent() {
     },
   ];
 
+  const inferToolType = (filePath: string): Tool['type'] => {
+    if (filePath.endsWith('.app')) return 'app';
+    if (filePath.endsWith('.jar')) return 'jar';
+    if (filePath.endsWith('.py')) return 'python';
+    if (filePath.endsWith('.sh') || filePath.endsWith('.bash') || filePath.endsWith('.zsh')) return 'shell';
+    if (filePath.endsWith('.bat') || filePath.endsWith('.cmd')) return 'batch';
+    return 'executable';
+  };
+
+  const inferToolName = (value: string): string => {
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      try {
+        const url = new URL(value);
+        return url.hostname.replace(/^www\./, '');
+      } catch {
+        return value;
+      }
+    }
+    const base = value.split('/').pop() ?? value;
+    return base.replace(/\.[^.]+$/, '');
+  };
+
+  const importDroppedFiles = async (items: string[]) => {
+    const categoryId = selectedCategoryId === 'all' ? 'misc' : selectedCategoryId;
+
+    for (const item of items) {
+      const type = item.startsWith('http://') || item.startsWith('https://')
+        ? 'url'
+        : inferToolType(item);
+
+      await saveTool({
+        id: '',
+        name: inferToolName(item),
+        description: '',
+        type,
+        path: item,
+        args: '',
+        categoryId,
+        color: type === 'app' ? '#007aff' : '#4f8ef7',
+        useCount: 0,
+        createdAt: Date.now(),
+      });
+    }
+  };
+
   return (
     <div
       style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
@@ -212,6 +265,41 @@ export default function MainContent() {
         const target = event.target as HTMLElement;
         if (target.closest('[data-tool-card="true"]') || target.closest('.context-menu')) return;
         if (selectedToolIds.length > 0) clearSelection();
+      }}
+      onDragEnter={event => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragOver={event => {
+        event.preventDefault();
+        if (!isDragging) setIsDragging(true);
+      }}
+      onDragLeave={event => {
+        event.preventDefault();
+        const target = event.currentTarget as HTMLDivElement;
+        const related = event.relatedTarget as Node | null;
+        if (!related || !target.contains(related)) {
+          setIsDragging(false);
+        }
+      }}
+      onDrop={event => {
+        event.preventDefault();
+        setIsDragging(false);
+
+        const filePaths = Array.from(event.dataTransfer.files)
+          .map(file => (file as File & { path?: string }).path)
+          .filter((value): value is string => Boolean(value));
+        const urlList = event.dataTransfer.getData('text/uri-list')
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('#'));
+        const plainText = event.dataTransfer.getData('text/plain').trim();
+        const droppedUrls = plainText && /^https?:\/\//i.test(plainText) ? [plainText] : [];
+        const imports = Array.from(new Set([...filePaths, ...urlList.filter(item => !item.startsWith('file://')), ...droppedUrls]));
+
+        if (imports.length > 0) {
+          void importDroppedFiles(imports);
+        }
       }}
     >
       {/* Toolbar */}
@@ -404,6 +492,18 @@ export default function MainContent() {
         )}
       </div>
 
+      {isDragging && (
+        <div className="drop-overlay">
+          <div className="drop-overlay-card">
+            <div style={{ fontSize: 42 }}>📥</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>拖到这里即可导入</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              支持 App、脚本、可执行文件和网址
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingTool !== undefined && (
         <ToolModal
           tool={editingTool}
@@ -415,6 +515,13 @@ export default function MainContent() {
         <ToolModal
           initialValues={newToolPreset}
           onClose={() => setNewToolPreset(null)}
+        />
+      )}
+
+      {showAppLibrary && (
+        <AppLibraryModal
+          defaultCategoryId={selectedCategoryId === 'all' ? 'misc' : selectedCategoryId}
+          onClose={() => setShowAppLibrary(false)}
         />
       )}
 

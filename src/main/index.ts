@@ -9,7 +9,7 @@ import {
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import { AppData, Tool, Category, AppSettings } from '../shared/types';
+import { AppData, Tool, Category, AppSettings, AppLibraryEntry } from '../shared/types';
 import { loadData, saveData, createId } from './store';
 import { launchTool, openInTerminal, showInFinder } from './launcher';
 
@@ -31,6 +31,17 @@ async function resolveToolIcon(tool: Tool): Promise<Tool> {
   }
 }
 
+async function getAppIconDataUrl(filePath: string): Promise<string | undefined> {
+  try {
+    if (!fs.existsSync(filePath)) return undefined;
+    const icon = await app.getFileIcon(filePath, { size: 'large' });
+    const dataUrl = icon.toDataURL();
+    return dataUrl || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function ensureToolIcons(tools: Tool[]): Promise<Tool[]> {
   let changed = false;
 
@@ -49,6 +60,57 @@ async function ensureToolIcons(tools: Tool[]): Promise<Tool[]> {
   }
 
   return resolved;
+}
+
+function scanMacApps(): string[] {
+  const homeDir = app.getPath('home');
+  const roots = [
+    '/Applications',
+    path.join(homeDir, 'Applications'),
+  ];
+  const discovered = new Set<string>();
+
+  const walk = (dirPath: string, depth: number): void => {
+    if (!fs.existsSync(dirPath) || depth > 2) return;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.name.endsWith('.app')) {
+        discovered.add(fullPath);
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        walk(fullPath, depth + 1);
+      }
+    }
+  };
+
+  roots.forEach(root => walk(root, 0));
+  return Array.from(discovered).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+}
+
+async function getAppLibrary(): Promise<AppLibraryEntry[]> {
+  if (process.platform !== 'darwin') return [];
+
+  const apps = scanMacApps();
+  const entries = await Promise.all(
+    apps.map(async appPath => ({
+      id: appPath,
+      name: path.basename(appPath, '.app'),
+      path: appPath,
+      icon: await getAppIconDataUrl(appPath),
+    }))
+  );
+
+  return entries;
 }
 
 function createWindow(): void {
@@ -145,6 +207,7 @@ function setupIPC(): void {
     ...appData,
     tools: await ensureToolIcons(appData.tools),
   }));
+  ipcMain.handle('get-app-library', async () => getAppLibrary());
 
   ipcMain.handle('save-tool', async (_event, tool: Tool) => {
     const resolvedTool = await resolveToolIcon(tool);

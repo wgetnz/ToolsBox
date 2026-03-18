@@ -6,9 +6,10 @@ import { useApp } from '../store/AppContext';
 interface Props {
   onOpenSettings: () => void;
   onAddTool: () => void;
+  onOpenAppLibrary: () => void;
 }
 
-export default function TitleBar({ onOpenSettings, onAddTool }: Props) {
+export default function TitleBar({ onOpenSettings, onAddTool, onOpenAppLibrary }: Props) {
   const { windowControl } = useApp();
 
   const dragStyle: any = { WebkitAppRegion: 'drag' };
@@ -52,6 +53,13 @@ export default function TitleBar({ onOpenSettings, onAddTool }: Props) {
           style={{ fontSize: 12, padding: '6px 14px' }}
         >
           <span>+</span> 添加工具
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={onOpenAppLibrary}
+          style={{ fontSize: 12, padding: '6px 14px' }}
+        >
+          <span>📚</span> 应用库
         </button>
         <button
           className="btn btn-ghost btn-icon"
