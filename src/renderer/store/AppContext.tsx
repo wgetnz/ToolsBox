@@ -20,6 +20,7 @@ declare global {
       openInTerminal: (dirPath: string) => Promise<void>;
       showInFinder: (filePath: string) => Promise<void>;
       windowControl: (action: 'minimize' | 'maximize' | 'close') => Promise<void>;
+      onOpenQuickLauncher: (callback: () => void) => () => void;
     };
   }
 }

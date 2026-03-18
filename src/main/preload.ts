@@ -21,6 +21,11 @@ const api = {
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   windowControl: (action: 'minimize' | 'maximize' | 'close') =>
     ipcRenderer.invoke('window-state', action),
+  onOpenQuickLauncher: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('open-quick-launcher', listener);
+    return () => ipcRenderer.removeListener('open-quick-launcher', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('launchbox', api);

@@ -45,6 +45,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => window.launchbox.onOpenQuickLauncher(() => {
+    setShowQuickLauncher(true);
+  }), []);
+
   if (!data) {
     return (
       <div style={{
