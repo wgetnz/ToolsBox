@@ -1,0 +1,66 @@
+import React from 'react';
+import { useApp } from '../store/AppContext';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+interface Props {
+  onOpenSettings: () => void;
+  onAddTool: () => void;
+}
+
+export default function TitleBar({ onOpenSettings, onAddTool }: Props) {
+  const { windowControl } = useApp();
+
+  const dragStyle: any = { WebkitAppRegion: 'drag' };
+  const noDragStyle: any = { WebkitAppRegion: 'no-drag' };
+
+  return (
+    <div style={{
+      height: 52,
+      display: 'flex',
+      alignItems: 'center',
+      padding: '0 16px 0 80px',
+      background: 'var(--bg-secondary)',
+      borderBottom: '1px solid var(--border-color)',
+      flexShrink: 0,
+      gap: 12,
+      ...dragStyle,
+    }}>
+      {/* App name */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 18 }}>🚀</span>
+        <span style={{
+          fontSize: 15,
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          letterSpacing: '-0.3px',
+        }}>LaunchBox</span>
+      </div>
+
+      <div style={{ flex: 1 }} />
+
+      {/* Actions */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        ...noDragStyle,
+      }}>
+        <button
+          className="btn btn-primary"
+          onClick={onAddTool}
+          style={{ fontSize: 12, padding: '6px 14px' }}
+        >
+          <span>+</span> 添加工具
+        </button>
+        <button
+          className="btn btn-ghost btn-icon"
+          onClick={onOpenSettings}
+          title="设置"
+        >
+          ⚙️
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,73 @@
+export type ToolType = 'jar' | 'python' | 'shell' | 'executable' | 'app' | 'batch' | 'url';
+
+export interface JavaEnv {
+  id: string;
+  name: string;
+  path: string;
+}
+
+export interface PythonEnv {
+  id: string;
+  name: string;
+  path: string;
+}
+
+export interface Tool {
+  id: string;
+  name: string;
+  description: string;
+  type: ToolType;
+  path: string;
+  args: string;
+  categoryId: string;
+  javaEnvId?: string;
+  pythonEnvId?: string;
+  icon?: string;
+  color?: string;
+  lastUsed?: number;
+  useCount: number;
+  createdAt: number;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  order: number;
+}
+
+export interface AppSettings {
+  theme: 'light' | 'dark';
+  fontSize: 'small' | 'medium' | 'large';
+  cardSize: 'small' | 'medium' | 'large';
+  backgroundColor?: string;
+  javaEnvs: JavaEnv[];
+  pythonEnvs: PythonEnv[];
+  startAtLogin: boolean;
+  minimizeToTray: boolean;
+  windowBounds?: { x: number; y: number; width: number; height: number };
+}
+
+export interface AppData {
+  tools: Tool[];
+  categories: Category[];
+  settings: AppSettings;
+}
+
+export type IpcChannel =
+  | 'launch-tool'
+  | 'get-data'
+  | 'save-tool'
+  | 'delete-tool'
+  | 'save-category'
+  | 'delete-category'
+  | 'save-settings'
+  | 'get-settings'
+  | 'select-file'
+  | 'select-directory'
+  | 'open-in-terminal'
+  | 'show-in-finder'
+  | 'minimize-window'
+  | 'maximize-window'
+  | 'close-window'
+  | 'window-state';

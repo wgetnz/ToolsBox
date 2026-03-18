@@ -1,0 +1,257 @@
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  Tray,
+  Menu,
+  nativeImage,
+} from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
+import { AppData, Tool, Category, AppSettings } from '../shared/types';
+import { loadData, saveData, createId } from './store';
+import { launchTool, openInTerminal, showInFinder } from './launcher';
+
+let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let appData: AppData;
+
+function createWindow(): void {
+  const { windowBounds } = appData.settings;
+
+  mainWindow = new BrowserWindow({
+    width: windowBounds?.width ?? 1200,
+    height: windowBounds?.height ?? 750,
+    x: windowBounds?.x,
+    y: windowBounds?.y,
+    minWidth: 800,
+    minHeight: 550,
+    frame: false,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
+    backgroundColor: '#1a1a2e',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+    show: false,
+  });
+
+  const rendererPath = path.join(app.getAppPath(), 'dist', 'renderer', 'index.html');
+  mainWindow.loadFile(rendererPath);
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  mainWindow.on('close', (event) => {
+    if (appData.settings.minimizeToTray && tray) {
+      event.preventDefault();
+      mainWindow?.hide();
+    } else {
+      saveWindowBounds();
+    }
+  });
+
+  mainWindow.on('resize', saveWindowBounds);
+  mainWindow.on('move', saveWindowBounds);
+}
+
+function saveWindowBounds(): void {
+  if (!mainWindow) return;
+  const bounds = mainWindow.getBounds();
+  appData.settings.windowBounds = bounds;
+  saveData(appData);
+}
+
+function createTray(): void {
+  // Try to load icon from assets
+  const iconPath = path.join(app.getAppPath(), 'assets', 'tray-icon.png');
+  const trayIcon = fs.existsSync(iconPath)
+    ? nativeImage.createFromPath(iconPath)
+    : nativeImage.createEmpty();
+
+  tray = new Tray(trayIcon);
+  tray.setToolTip('LaunchBox');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示 LaunchBox',
+      click: () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        saveWindowBounds();
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.on('click', () => {
+    if (mainWindow?.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow?.show();
+      mainWindow?.focus();
+    }
+  });
+}
+
+// IPC handlers
+function setupIPC(): void {
+  ipcMain.handle('get-data', () => appData);
+
+  ipcMain.handle('save-tool', (_event, tool: Tool) => {
+    if (!tool.id) {
+      tool.id = createId();
+      tool.createdAt = Date.now();
+      tool.useCount = 0;
+      appData.tools.push(tool);
+    } else {
+      const idx = appData.tools.findIndex(t => t.id === tool.id);
+      if (idx >= 0) {
+        appData.tools[idx] = tool;
+      } else {
+        appData.tools.push(tool);
+      }
+    }
+    saveData(appData);
+    return appData.tools;
+  });
+
+  ipcMain.handle('delete-tool', (_event, toolId: string) => {
+    appData.tools = appData.tools.filter(t => t.id !== toolId);
+    saveData(appData);
+    return appData.tools;
+  });
+
+  ipcMain.handle('save-category', (_event, category: Category) => {
+    // Don't allow editing built-in "all" category
+    if (!category.id || category.id === 'all') return appData.categories;
+
+    const idx = appData.categories.findIndex(c => c.id === category.id);
+    if (idx >= 0) {
+      appData.categories[idx] = category;
+    } else {
+      category.id = createId();
+      appData.categories.push(category);
+    }
+    saveData(appData);
+    return appData.categories;
+  });
+
+  ipcMain.handle('delete-category', (_event, categoryId: string) => {
+    if (categoryId === 'all') return appData.categories;
+    appData.categories = appData.categories.filter(c => c.id !== categoryId);
+    // Move tools from deleted category to 'misc'
+    appData.tools = appData.tools.map(t =>
+      t.categoryId === categoryId ? { ...t, categoryId: 'misc' } : t
+    );
+    saveData(appData);
+    return { categories: appData.categories, tools: appData.tools };
+  });
+
+  ipcMain.handle('save-settings', (_event, settings: AppSettings) => {
+    appData.settings = { ...appData.settings, ...settings };
+    saveData(appData);
+
+    // Handle login item
+    if (process.platform === 'darwin' || process.platform === 'win32') {
+      app.setLoginItemSettings({
+        openAtLogin: appData.settings.startAtLogin,
+      });
+    }
+
+    return appData.settings;
+  });
+
+  ipcMain.handle('launch-tool', async (_event, toolId: string) => {
+    const tool = appData.tools.find(t => t.id === toolId);
+    if (!tool) return { success: false, error: 'Tool not found' };
+
+    try {
+      await launchTool(tool, appData.settings);
+      // Update usage stats
+      tool.lastUsed = Date.now();
+      tool.useCount = (tool.useCount || 0) + 1;
+      saveData(appData);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('select-file', async (_event, filters?: Electron.FileFilter[]) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: filters || [{ name: 'All Files', extensions: ['*'] }],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('open-in-terminal', (_event, dirPath: string) => {
+    openInTerminal(dirPath);
+  });
+
+  ipcMain.handle('show-in-finder', (_event, filePath: string) => {
+    showInFinder(filePath);
+  });
+
+  ipcMain.handle('window-state', (_event, action: string) => {
+    if (!mainWindow) return;
+    switch (action) {
+      case 'minimize': mainWindow.minimize(); break;
+      case 'maximize':
+        mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+        break;
+      case 'close':
+        if (appData.settings.minimizeToTray && tray) {
+          mainWindow.hide();
+        } else {
+          saveWindowBounds();
+          mainWindow.close();
+        }
+        break;
+    }
+  });
+}
+
+app.whenReady().then(() => {
+  appData = loadData();
+  setupIPC();
+  createWindow();
+  createTray();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    } else {
+      mainWindow?.show();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  saveWindowBounds();
+});
