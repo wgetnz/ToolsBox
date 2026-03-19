@@ -67,12 +67,9 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
   React.useEffect(() => {
     setCategoryId(defaultCategoryId);
   }, [defaultCategoryId]);
-
-  if (!data) return null;
-
-  const categories = data.categories.filter(category => category.id !== 'all');
+  const categories = data?.categories.filter(category => category.id !== 'all') ?? [];
   const existingAppPaths = new Set(
-    data.tools.filter(tool => tool.type === 'app').map(tool => tool.path)
+    (data?.tools ?? []).filter(tool => tool.type === 'app').map(tool => tool.path)
   );
   const filtered = React.useMemo(() => {
     const queryText = normalizeSearch(query);
@@ -109,12 +106,14 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
       icon: entry.icon,
       color: '#007aff',
       useCount: 0,
-      createdAt: Date.now(),
+      createdAt: new Date().getTime(),
     };
 
     await saveTool(tool);
     setAddingIds(current => current.filter(id => id !== entry.id));
   };
+
+  if (!data) return null;
 
   return (
     <div className="overlay" onClick={onClose}>

@@ -1,6 +1,5 @@
 import { spawn, exec } from 'child_process';
 import * as path from 'path';
-import * as os from 'os';
 import { Tool, AppSettings } from '../shared/types';
 
 function getPlatform(): 'mac' | 'win' | 'linux' {

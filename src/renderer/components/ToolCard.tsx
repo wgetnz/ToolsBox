@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
@@ -33,11 +33,6 @@ const TYPE_COLORS: Record<string, string> = {
   url: '#1abc9c',
 };
 
-const CARD_COLORS = [
-  '#4f8ef7', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
-  '#1abc9c', '#3498db', '#e67e22', '#e91e63', '#00bcd4',
-];
-
 interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
@@ -60,7 +55,6 @@ export default function ToolCard({
   const [launching, setLaunching] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [iconFailed, setIconFailed] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   const accentColor = tool.color || TYPE_COLORS[tool.type] || '#4f8ef7';
   const hasCustomIcon = Boolean(tool.icon) && !iconFailed;
@@ -108,7 +102,6 @@ export default function ToolCard({
   return (
     <>
       <div
-        ref={cardRef}
         data-tool-card="true"
         style={{
           width: dims.width,

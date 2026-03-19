@@ -18,15 +18,15 @@ export default function Sidebar() {
   } | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
 
-  if (!data) return null;
-
-  const { categories, tools } = data;
-
   useEffect(() => () => {
     if (hoverTimerRef.current) {
       window.clearTimeout(hoverTimerRef.current);
     }
   }, []);
+
+  if (!data) return null;
+
+  const { categories, tools } = data;
 
   const getCount = (catId: string) => {
     if (catId === 'all') return tools.length;

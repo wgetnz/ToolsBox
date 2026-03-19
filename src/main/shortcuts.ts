@@ -14,7 +14,7 @@ function escapeCmdArg(value: string): string {
 }
 
 function sanitizeFileName(name: string): string {
-  const normalized = name.trim().replace(/[\/\\:*?"<>|]/g, '-');
+  const normalized = name.trim().replace(/[/\\:*?"<>|]/g, '-');
   return normalized || 'LaunchBox Shortcut';
 }
 

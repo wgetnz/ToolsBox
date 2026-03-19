@@ -135,7 +135,6 @@ export default function MainContent() {
     : data.categories.find(c => c.id === selectedCategoryId)?.name ?? '工具';
   const filteredToolIds = filtered.map(tool => tool.id);
   const selectedSet = new Set(selectedToolIds);
-  const selectedTools = filtered.filter(tool => selectedSet.has(tool.id));
   const nonAllCategories = data.categories.filter(category => category.id !== 'all');
 
   const clearSelection = () => {
@@ -531,7 +530,7 @@ export default function MainContent() {
             ) : (
               <>
                 <h3>暂无工具</h3>
-                <p>点击右上角"添加工具"来添加你的第一个工具</p>
+                <p>点击右上角“添加工具”来添加你的第一个工具</p>
               </>
             )}
           </div>

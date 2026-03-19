@@ -15,11 +15,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAppLibrary, setShowAppLibrary] = useState(false);
   const [showQuickLauncher, setShowQuickLauncher] = useState(false);
+  const settings = data?.settings;
 
   // Apply theme and settings to document
   useEffect(() => {
-    if (!data) return;
-    const { theme, fontSize, backgroundColor } = data.settings;
+    if (!settings) return;
+    const { theme, fontSize, backgroundColor } = settings;
 
     document.body.className = theme;
 
@@ -31,7 +32,7 @@ export default function App() {
     } else {
       document.documentElement.style.removeProperty('--bg-primary');
     }
-  }, [data?.settings]);
+  }, [settings]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

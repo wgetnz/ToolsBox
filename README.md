@@ -102,6 +102,13 @@ npm install
 npm run dev
 ```
 
+静态检查：
+
+```bash
+npm run lint
+npm run typecheck
+```
+
 构建：
 
 ```bash

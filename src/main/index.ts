@@ -65,7 +65,7 @@ function ensureDir(dirPath: string): void {
 }
 
 function cacheFileNameForApp(appPath: string): string {
-  return Buffer.from(appPath).toString('base64').replace(/[\/+=]/g, '_');
+  return Buffer.from(appPath).toString('base64').replace(/[/+=]/g, '_');
 }
 
 function readImageAsDataUrl(imagePath: string): string | undefined {
@@ -565,7 +565,11 @@ function setupIPC(): void {
     switch (action) {
       case 'minimize': mainWindow.minimize(); break;
       case 'maximize':
-        mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+        if (mainWindow.isMaximized()) {
+          mainWindow.unmaximize();
+        } else {
+          mainWindow.maximize();
+        }
         break;
       case 'close':
         if (appData.settings.minimizeToTray && tray) {

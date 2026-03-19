@@ -1,7 +1,4 @@
 import React from 'react';
-import { useApp } from '../store/AppContext';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface Props {
   onOpenSettings: () => void;
@@ -10,10 +7,8 @@ interface Props {
 }
 
 export default function TitleBar({ onOpenSettings, onAddTool, onOpenAppLibrary }: Props) {
-  const { windowControl } = useApp();
-
-  const dragStyle: any = { WebkitAppRegion: 'drag' };
-  const noDragStyle: any = { WebkitAppRegion: 'no-drag' };
+  const dragStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties;
+  const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
 
   return (
     <div style={{
