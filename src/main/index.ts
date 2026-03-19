@@ -17,51 +17,6 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
 
-async function resolveToolIcon(tool: Tool): Promise<Tool> {
-  if (tool.type !== 'app' || !tool.path) return tool;
-
-  try {
-    if (!fs.existsSync(tool.path)) return tool;
-    const icon = await app.getFileIcon(tool.path, { size: 'large' });
-    const dataUrl = icon.toDataURL();
-    if (!dataUrl) return tool;
-    return { ...tool, icon: dataUrl };
-  } catch {
-    return tool;
-  }
-}
-
-async function getAppIconDataUrl(filePath: string): Promise<string | undefined> {
-  try {
-    if (!fs.existsSync(filePath)) return undefined;
-    const icon = await app.getFileIcon(filePath, { size: 'large' });
-    const dataUrl = icon.toDataURL();
-    return dataUrl || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function ensureToolIcons(tools: Tool[]): Promise<Tool[]> {
-  let changed = false;
-
-  const resolved = await Promise.all(
-    tools.map(async tool => {
-      if (tool.type !== 'app' || tool.icon || !tool.path) return tool;
-      const nextTool = await resolveToolIcon(tool);
-      if (nextTool.icon && nextTool.icon !== tool.icon) changed = true;
-      return nextTool;
-    })
-  );
-
-  if (changed) {
-    appData.tools = resolved;
-    saveData(appData);
-  }
-
-  return resolved;
-}
-
 function scanMacApps(): string[] {
   const homeDir = app.getPath('home');
   const roots = [
@@ -101,16 +56,11 @@ async function getAppLibrary(): Promise<AppLibraryEntry[]> {
   if (process.platform !== 'darwin') return [];
 
   const apps = scanMacApps();
-  const entries = await Promise.all(
-    apps.map(async appPath => ({
-      id: appPath,
-      name: path.basename(appPath, '.app'),
-      path: appPath,
-      icon: await getAppIconDataUrl(appPath),
-    }))
-  );
-
-  return entries;
+  return apps.map(appPath => ({
+    id: appPath,
+    name: path.basename(appPath, '.app'),
+    path: appPath,
+  }));
 }
 
 function createWindow(): void {
@@ -223,26 +173,21 @@ function createTray(): void {
 
 // IPC handlers
 function setupIPC(): void {
-  ipcMain.handle('get-data', async () => ({
-    ...appData,
-    tools: await ensureToolIcons(appData.tools),
-  }));
+  ipcMain.handle('get-data', async () => appData);
   ipcMain.handle('get-app-library', async () => getAppLibrary());
 
   ipcMain.handle('save-tool', async (_event, tool: Tool) => {
-    const resolvedTool = await resolveToolIcon(tool);
-
     if (!tool.id) {
-      resolvedTool.id = createId();
-      resolvedTool.createdAt = Date.now();
-      resolvedTool.useCount = 0;
-      appData.tools.push(resolvedTool);
+      tool.id = createId();
+      tool.createdAt = Date.now();
+      tool.useCount = 0;
+      appData.tools.push(tool);
     } else {
-      const idx = appData.tools.findIndex(t => t.id === resolvedTool.id);
+      const idx = appData.tools.findIndex(t => t.id === tool.id);
       if (idx >= 0) {
-        appData.tools[idx] = resolvedTool;
+        appData.tools[idx] = tool;
       } else {
-        appData.tools.push(resolvedTool);
+        appData.tools.push(tool);
       }
     }
     saveData(appData);
