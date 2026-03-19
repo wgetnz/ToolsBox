@@ -10,6 +10,7 @@ const defaultSettings = {
   theme: 'dark',
   fontSize: 'medium',
   cardSize: 'medium',
+  iconDisplaySize: 'medium',
   backgroundColor: undefined,
   hoverSwitchCategories: true,
   showRecentTools: true,

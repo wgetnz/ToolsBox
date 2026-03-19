@@ -36,6 +36,7 @@ const TYPE_COLORS: Record<string, string> = {
 interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
+  iconDisplaySize: 'small' | 'medium' | 'large';
   onEdit: (tool: Tool) => void;
   selected?: boolean;
   onSelect?: (event: React.MouseEvent, tool: Tool) => void;
@@ -45,6 +46,7 @@ interface Props {
 export default function ToolCard({
   tool,
   size,
+  iconDisplaySize,
   onEdit,
   selected = false,
   onSelect,
@@ -64,6 +66,11 @@ export default function ToolCard({
     medium: { width: 180, height: 140, iconSize: 36, nameFontSize: 14 },
     large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
   }[size];
+  const iconSize = {
+    small: Math.max(20, dims.iconSize - 8),
+    medium: dims.iconSize,
+    large: dims.iconSize + 10,
+  }[iconDisplaySize];
 
   const handleLaunch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -182,14 +189,14 @@ export default function ToolCard({
 
         {/* Icon */}
         <div style={{
-          width: dims.iconSize + 16,
-          height: dims.iconSize + 16,
+          width: iconSize + 16,
+          height: iconSize + 16,
           background: accentColor + '18',
           borderRadius: 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: dims.iconSize,
+          fontSize: iconSize,
           transition: 'transform 0.15s',
           transform: hover ? 'scale(1.05)' : 'scale(1)',
           overflow: 'hidden',
@@ -200,8 +207,8 @@ export default function ToolCard({
               alt={tool.name}
               onError={() => setIconFailed(true)}
               style={{
-                width: dims.iconSize + 6,
-                height: dims.iconSize + 6,
+                width: iconSize + 6,
+                height: iconSize + 6,
                 objectFit: 'contain',
               }}
             />

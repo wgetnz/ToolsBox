@@ -40,6 +40,7 @@ export interface AppSettings {
   theme: 'light' | 'dark';
   fontSize: 'small' | 'medium' | 'large';
   cardSize: 'small' | 'medium' | 'large';
+  iconDisplaySize: 'small' | 'medium' | 'large';
   backgroundColor?: string;
   hoverSwitchCategories: boolean;
   showRecentTools: boolean;

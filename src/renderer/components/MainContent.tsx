@@ -58,6 +58,7 @@ export default function MainContent() {
     moveToolsToCategory,
     updateToolsColor,
     saveTool,
+    saveSettings,
     showToast,
     expandImportItems,
     selectDirectory,
@@ -129,6 +130,7 @@ export default function MainContent() {
   }
 
   const cardSize = data.settings.cardSize;
+  const iconDisplaySize = data.settings.iconDisplaySize;
 
   const categoryName = selectedCategoryId === 'all'
     ? '全部工具'
@@ -408,6 +410,30 @@ export default function MainContent() {
 
         {/* Sort */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+          <span>图标:</span>
+          {(['small', 'medium', 'large'] as const).map(size => (
+            <button
+              key={size}
+              onClick={() => {
+                void saveSettings({ ...data.settings, iconDisplaySize: size });
+              }}
+              style={{
+                padding: '3px 8px',
+                borderRadius: 6,
+                border: '1px solid var(--border-color)',
+                background: iconDisplaySize === size ? 'var(--accent-color)' : 'var(--bg-input)',
+                color: iconDisplaySize === size ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+            >
+              {size === 'small' ? '小' : size === 'medium' ? '中' : '大'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
           <span>排序:</span>
           {([
             ['name', '名称'],
@@ -545,6 +571,7 @@ export default function MainContent() {
                 key={tool.id}
                 tool={tool}
                 size={cardSize}
+                iconDisplaySize={iconDisplaySize}
                 onEdit={t => setEditingTool(t)}
                 selected={selectedSet.has(tool.id)}
                 onSelect={handleSelectTool}
