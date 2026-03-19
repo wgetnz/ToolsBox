@@ -18,11 +18,31 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
 
-function readBundleInfo(appPath: string): Record<string, unknown> | null {
+function resolveAppBundlePath(appPath: string): string {
+  const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
+  if (fs.existsSync(infoPlistPath)) return appPath;
+
+  const wrapperDir = path.join(appPath, 'Wrapper');
+  if (!fs.existsSync(wrapperDir)) return appPath;
+
   try {
-    const plistPath = path.join(appPath, 'Contents', 'Info.plist');
-    if (!fs.existsSync(plistPath)) return null;
-    const output = execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', plistPath], {
+    const nestedApp = fs.readdirSync(wrapperDir).find(entry => {
+      if (!entry.endsWith('.app')) return false;
+      return fs.existsSync(path.join(wrapperDir, entry, 'Info.plist'));
+    });
+    return nestedApp ? path.join(wrapperDir, nestedApp) : appPath;
+  } catch {
+    return appPath;
+  }
+}
+
+function readBundleInfo(bundlePath: string): Record<string, unknown> | null {
+  try {
+    const plistPath = path.join(bundlePath, 'Contents', 'Info.plist');
+    const wrapperPlistPath = path.join(bundlePath, 'Info.plist');
+    const targetPlistPath = fs.existsSync(plistPath) ? plistPath : wrapperPlistPath;
+    if (!fs.existsSync(targetPlistPath)) return null;
+    const output = execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', targetPlistPath], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
@@ -42,6 +62,15 @@ function ensureDir(dirPath: string): void {
 
 function cacheFileNameForApp(appPath: string): string {
   return Buffer.from(appPath).toString('base64').replace(/[\/+=]/g, '_');
+}
+
+function readImageAsDataUrl(imagePath: string): string | undefined {
+  try {
+    const buffer = fs.readFileSync(imagePath);
+    return `data:image/png;base64,${buffer.toString('base64')}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function candidateIconNames(bundleInfo: Record<string, unknown>): string[] {
@@ -71,11 +100,17 @@ function candidateIconNames(bundleInfo: Record<string, unknown>): string[] {
   return Array.from(candidates);
 }
 
-function resolveIcnsPath(appPath: string): string | null {
-  const resourcesDir = path.join(appPath, 'Contents', 'Resources');
+function getResourcesDir(bundlePath: string): string {
+  const contentsResources = path.join(bundlePath, 'Contents', 'Resources');
+  if (fs.existsSync(contentsResources)) return contentsResources;
+  return bundlePath;
+}
+
+function resolveIcnsPath(bundlePath: string): string | null {
+  const resourcesDir = getResourcesDir(bundlePath);
   if (!fs.existsSync(resourcesDir)) return null;
 
-  const bundleInfo = readBundleInfo(appPath);
+  const bundleInfo = readBundleInfo(bundlePath);
   const names = bundleInfo ? candidateIconNames(bundleInfo) : [];
 
   for (const name of names) {
@@ -92,26 +127,57 @@ function resolveIcnsPath(appPath: string): string | null {
   }
 }
 
-function extractIconFromAssetsCar(appPath: string, bundleInfo: Record<string, unknown> | null): string | null {
-  const resourcesDir = path.join(appPath, 'Contents', 'Resources');
+function extractIconFromAssetsCar(bundlePath: string, cacheKeyPath: string, bundleInfo: Record<string, unknown> | null): string | null {
+  const resourcesDir = getResourcesDir(bundlePath);
   const assetsCarPath = path.join(resourcesDir, 'Assets.car');
   if (!fs.existsSync(assetsCarPath)) return null;
 
-  const iconName = bundleInfo && typeof bundleInfo.CFBundleIconName === 'string'
-    ? bundleInfo.CFBundleIconName
-    : null;
-  if (!iconName) return null;
+  const iconNames = bundleInfo ? candidateIconNames(bundleInfo) : [];
+  if (iconNames.length === 0) return null;
 
   const cacheDir = getIconCacheDir();
   ensureDir(cacheDir);
-  const outputPath = path.join(cacheDir, `${cacheFileNameForApp(appPath)}.icns`);
+  const outputPath = path.join(cacheDir, `${cacheFileNameForApp(cacheKeyPath)}.car.icns`);
 
   try {
-    if (!fs.existsSync(outputPath)) {
+    for (const iconName of iconNames) {
       execFileSync('/usr/bin/iconutil', ['-c', 'icns', assetsCarPath, iconName, '-o', outputPath], {
         stdio: ['ignore', 'ignore', 'ignore'],
       });
+      if (fs.existsSync(outputPath)) return outputPath;
     }
+    return null;
+  } catch {
+    for (const iconName of iconNames.slice(1)) {
+      try {
+        execFileSync('/usr/bin/iconutil', ['-c', 'icns', assetsCarPath, iconName, '-o', outputPath], {
+          stdio: ['ignore', 'ignore', 'ignore'],
+        });
+        if (fs.existsSync(outputPath)) return outputPath;
+      } catch {
+        continue;
+      }
+    }
+    return fs.existsSync(outputPath) ? outputPath : null;
+  }
+}
+
+function convertIcnsToPng(appPath: string, icnsPath: string): string | null {
+  const cacheDir = getIconCacheDir();
+  ensureDir(cacheDir);
+
+  const outputPath = path.join(cacheDir, `${cacheFileNameForApp(appPath)}.png`);
+
+  try {
+    const sourceStat = fs.statSync(icnsPath);
+    const cachedStat = fs.existsSync(outputPath) ? fs.statSync(outputPath) : null;
+
+    if (!cachedStat || cachedStat.mtimeMs < sourceStat.mtimeMs) {
+      execFileSync('/usr/bin/sips', ['-s', 'format', 'png', icnsPath, '--out', outputPath], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+    }
+
     return fs.existsSync(outputPath) ? outputPath : null;
   } catch {
     return null;
@@ -120,12 +186,13 @@ function extractIconFromAssetsCar(appPath: string, bundleInfo: Record<string, un
 
 function loadAppBundleIcon(appPath: string): string | undefined {
   try {
-    const bundleInfo = readBundleInfo(appPath);
-    const icnsPath = resolveIcnsPath(appPath) ?? extractIconFromAssetsCar(appPath, bundleInfo);
+    const bundlePath = resolveAppBundlePath(appPath);
+    const bundleInfo = readBundleInfo(bundlePath);
+    const icnsPath = resolveIcnsPath(bundlePath) ?? extractIconFromAssetsCar(bundlePath, appPath, bundleInfo);
     if (!icnsPath) return undefined;
-    const image = nativeImage.createFromPath(icnsPath);
-    if (image.isEmpty()) return undefined;
-    return image.toDataURL();
+    const pngPath = convertIcnsToPng(appPath, icnsPath);
+    if (!pngPath) return undefined;
+    return readImageAsDataUrl(pngPath);
   } catch {
     return undefined;
   }
