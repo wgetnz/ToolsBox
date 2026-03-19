@@ -7,6 +7,41 @@ interface Props {
   onClose: () => void;
 }
 
+function normalizeSearch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function scoreSearch(queryText: string, ...fields: Array<string | undefined>): number {
+  if (!queryText) return 1;
+
+  const tokens = queryText.split(/\s+/).filter(Boolean);
+  const haystacks = fields
+    .filter((field): field is string => Boolean(field))
+    .map(field => normalizeSearch(field));
+
+  let score = 0;
+
+  for (const token of tokens) {
+    let tokenScore = 0;
+
+    for (const haystack of haystacks) {
+      if (haystack === token) tokenScore = Math.max(tokenScore, 120);
+      else if (haystack.startsWith(token)) tokenScore = Math.max(tokenScore, 90);
+      else if (haystack.includes(token)) tokenScore = Math.max(tokenScore, 60);
+      else {
+        const compactHaystack = haystack.replace(/[\s\-_/]+/g, '');
+        const compactToken = token.replace(/[\s\-_/]+/g, '');
+        if (compactToken && compactHaystack.includes(compactToken)) tokenScore = Math.max(tokenScore, 35);
+      }
+    }
+
+    if (tokenScore === 0) return 0;
+    score += tokenScore;
+  }
+
+  return score;
+}
+
 export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
   const { data, getAppLibrary, saveTool, showToast } = useApp();
   const [entries, setEntries] = React.useState<AppLibraryEntry[]>([]);
@@ -39,9 +74,21 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
   const existingAppPaths = new Set(
     data.tools.filter(tool => tool.type === 'app').map(tool => tool.path)
   );
-  const filtered = entries.filter(entry =>
-    !query.trim() || entry.name.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const filtered = React.useMemo(() => {
+    const queryText = normalizeSearch(query);
+    return entries
+      .map(entry => ({
+        entry,
+        score: scoreSearch(queryText, entry.name, entry.path, entry.source === 'system' ? '系统' : '本地'),
+      }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => {
+        if (queryText && a.score !== b.score) return b.score - a.score;
+        if (a.entry.source !== b.entry.source) return a.entry.source === 'user' ? -1 : 1;
+        return a.entry.name.localeCompare(b.entry.name, 'zh-CN');
+      })
+      .map(item => item.entry);
+  }, [entries, query]);
 
   const addApp = async (entry: AppLibraryEntry) => {
     if (existingAppPaths.has(entry.path)) {

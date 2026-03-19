@@ -13,6 +13,41 @@ const BATCH_COLORS = [
   '#1abc9c', '#3498db', '#e67e22', '#e91e63', '#00bcd4',
 ];
 
+function normalizeSearch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function scoreSearch(queryText: string, ...fields: Array<string | undefined>): number {
+  if (!queryText) return 1;
+
+  const tokens = queryText.split(/\s+/).filter(Boolean);
+  const haystacks = fields
+    .filter((field): field is string => Boolean(field))
+    .map(field => normalizeSearch(field));
+
+  let score = 0;
+
+  for (const token of tokens) {
+    let tokenScore = 0;
+
+    for (const haystack of haystacks) {
+      if (haystack === token) tokenScore = Math.max(tokenScore, 120);
+      else if (haystack.startsWith(token)) tokenScore = Math.max(tokenScore, 90);
+      else if (haystack.includes(token)) tokenScore = Math.max(tokenScore, 60);
+      else {
+        const compactHaystack = haystack.replace(/[\s\-_/]+/g, '');
+        const compactToken = token.replace(/[\s\-_/]+/g, '');
+        if (compactToken && compactHaystack.includes(compactToken)) tokenScore = Math.max(tokenScore, 35);
+      }
+    }
+
+    if (tokenScore === 0) return 0;
+    score += tokenScore;
+  }
+
+  return score;
+}
+
 export default function MainContent() {
   const {
     data,
@@ -50,38 +85,39 @@ export default function MainContent() {
   const filtered = useMemo(() => {
     if (!data) return [];
     let tools = data.tools;
+    const queryText = normalizeSearch(searchQuery);
 
     if (selectedCategoryId !== 'all') {
       tools = tools.filter(t => t.categoryId === selectedCategoryId);
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      tools = tools.filter(t =>
-        t.name.toLowerCase().includes(q) ||
-        t.description?.toLowerCase().includes(q) ||
-        t.type.toLowerCase().includes(q)
-      );
-    }
+    const scoredTools = tools
+      .map(tool => ({
+        tool,
+        score: scoreSearch(queryText, tool.name, tool.description, tool.path, tool.type),
+      }))
+      .filter(entry => entry.score > 0);
 
-    return [...tools].sort((a, b) => {
+    return scoredTools.sort((a, b) => {
+      if (queryText && a.score !== b.score) return b.score - a.score;
+
       let val = 0;
       switch (sortKey) {
         case 'name':
-          val = a.name.localeCompare(b.name, 'zh-CN');
+          val = a.tool.name.localeCompare(b.tool.name, 'zh-CN');
           break;
         case 'lastUsed':
-          val = (b.lastUsed ?? 0) - (a.lastUsed ?? 0);
+          val = (b.tool.lastUsed ?? 0) - (a.tool.lastUsed ?? 0);
           break;
         case 'useCount':
-          val = b.useCount - a.useCount;
+          val = b.tool.useCount - a.tool.useCount;
           break;
         case 'createdAt':
-          val = b.createdAt - a.createdAt;
+          val = b.tool.createdAt - a.tool.createdAt;
           break;
       }
       return sortAsc ? val : -val;
-    });
+    }).map(entry => entry.tool);
   }, [data, selectedCategoryId, searchQuery, sortKey, sortAsc]);
 
   if (!data) {
