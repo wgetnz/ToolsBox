@@ -77,7 +77,9 @@ export default function ToolCard({
   const handleCustomDragStart = (event: React.DragEvent) => {
     if (!customSortEnabled) return;
     event.stopPropagation();
+    event.dataTransfer.setData('text/plain', tool.id);
     event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.dropEffect = 'move';
     onCustomDragStart?.();
   };
   const handleCustomDragEnd = (event: React.DragEvent) => {
@@ -252,6 +254,7 @@ export default function ToolCard({
             transform: hover ? 'scale(1.05)' : 'scale(1)',
             overflow: 'hidden',
             cursor: customSortEnabled ? 'grab' : 'inherit',
+            userSelect: 'none',
           }}
         >
           {hasCustomIcon ? (
