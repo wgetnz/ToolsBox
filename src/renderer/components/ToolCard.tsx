@@ -74,6 +74,17 @@ export default function ToolCard({
     large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
   }[size];
   const iconSize = dims.iconSize;
+  const handleCustomDragStart = (event: React.DragEvent) => {
+    if (!customSortEnabled) return;
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = 'move';
+    onCustomDragStart?.();
+  };
+  const handleCustomDragEnd = (event: React.DragEvent) => {
+    if (!customSortEnabled) return;
+    event.stopPropagation();
+    onCustomDragEnd?.();
+  };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     const handled = onRequestContextMenu?.(e, tool);
@@ -197,15 +208,8 @@ export default function ToolCard({
             draggable
             onClick={event => event.stopPropagation()}
             onMouseDown={event => event.stopPropagation()}
-            onDragStart={event => {
-              event.stopPropagation();
-              event.dataTransfer.effectAllowed = 'move';
-              onCustomDragStart?.();
-            }}
-            onDragEnd={event => {
-              event.stopPropagation();
-              onCustomDragEnd?.();
-            }}
+            onDragStart={handleCustomDragStart}
+            onDragEnd={handleCustomDragEnd}
             style={{
               position: 'absolute',
               top: isCompact ? 6 : 8,
@@ -229,23 +233,31 @@ export default function ToolCard({
         )}
 
         {/* Icon */}
-        <div style={{
-          width: isCompact ? iconSize + 8 : iconSize + 16,
-          height: isCompact ? iconSize + 8 : iconSize + 16,
-          background: accentColor + '18',
-          borderRadius: isCompact ? 10 : 12,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: iconSize,
-          transition: 'transform 0.15s',
-          transform: hover ? 'scale(1.05)' : 'scale(1)',
-          overflow: 'hidden',
-        }}>
+        <div
+          draggable={customSortEnabled}
+          onDragStart={handleCustomDragStart}
+          onDragEnd={handleCustomDragEnd}
+          title={customSortEnabled ? '拖动图标调整顺序' : undefined}
+          style={{
+            width: isCompact ? iconSize + 8 : iconSize + 16,
+            height: isCompact ? iconSize + 8 : iconSize + 16,
+            background: accentColor + '18',
+            borderRadius: isCompact ? 10 : 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: iconSize,
+            transition: 'transform 0.15s',
+            transform: hover ? 'scale(1.05)' : 'scale(1)',
+            overflow: 'hidden',
+            cursor: customSortEnabled ? 'grab' : 'inherit',
+          }}
+        >
           {hasCustomIcon ? (
             <img
               src={tool.icon}
               alt={tool.name}
+              draggable={false}
               onError={() => setIconFailed(true)}
               style={{
                 width: isCompact ? iconSize + 2 : iconSize + 6,
