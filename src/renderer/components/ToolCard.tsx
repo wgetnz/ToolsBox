@@ -108,11 +108,11 @@ export default function ToolCard({
         style={{
           width: dims.width,
           height: dims.height,
-          background: isCompact ? 'transparent' : selected ? `${accentColor}18` : hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
+          background: selected ? `${accentColor}18` : hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
           borderRadius: isCompact ? 10 : 14,
-          border: isCompact
-            ? `1px solid ${selected ? accentColor + '55' : 'transparent'}`
-            : `1px solid ${selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'}`,
+          border: `1px solid ${
+            selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'
+          }`,
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
@@ -122,7 +122,7 @@ export default function ToolCard({
           padding: isCompact ? '8px 6px' : 12,
           position: 'relative',
           transition: 'all 0.15s ease',
-          boxShadow: isCompact ? 'none' : selected
+          boxShadow: selected
             ? `0 10px 28px ${accentColor}26`
             : hover ? `0 8px 24px ${accentColor}20` : 'none',
           transform: hover && !isCompact ? 'translateY(-2px)' : 'none',
@@ -135,17 +135,15 @@ export default function ToolCard({
         onContextMenu={handleContextMenu}
       >
         {/* Top accent strip */}
-        {!isCompact && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: accentColor,
-            borderRadius: '14px 14px 0 0',
-          }} />
-        )}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: accentColor,
+          borderRadius: `${isCompact ? 10 : 14}px ${isCompact ? 10 : 14}px 0 0`,
+        }} />
 
         {/* Type badge */}
         {!isCompact && (
@@ -190,8 +188,8 @@ export default function ToolCard({
         <div style={{
           width: isCompact ? iconSize + 8 : iconSize + 16,
           height: isCompact ? iconSize + 8 : iconSize + 16,
-          background: isCompact ? 'transparent' : accentColor + '18',
-          borderRadius: isCompact ? 0 : 12,
+          background: accentColor + '18',
+          borderRadius: isCompact ? 10 : 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -206,8 +204,8 @@ export default function ToolCard({
               alt={tool.name}
               onError={() => setIconFailed(true)}
               style={{
-                width: isCompact ? iconSize : iconSize + 6,
-                height: isCompact ? iconSize : iconSize + 6,
+                width: isCompact ? iconSize + 2 : iconSize + 6,
+                height: isCompact ? iconSize + 2 : iconSize + 6,
                 objectFit: 'contain',
               }}
             />
