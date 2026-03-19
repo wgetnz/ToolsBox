@@ -405,7 +405,7 @@ export default function MainContent() {
         alignItems: 'center',
         padding: '10px 20px',
         borderBottom: '1px solid var(--border-color)',
-        gap: 12,
+        gap: 8,
         flexShrink: 0,
       }}>
         <div>
@@ -422,8 +422,7 @@ export default function MainContent() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Sort */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
             onClick={toggleSelectionMode}
             style={{
@@ -441,8 +440,8 @@ export default function MainContent() {
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>显示:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>显</span>
           {(['small', 'medium', 'large'] as const).map(size => (
             <button
               key={size}
@@ -450,7 +449,8 @@ export default function MainContent() {
                 void saveSettings({ ...data.settings, cardSize: size });
               }}
               style={{
-                padding: '3px 8px',
+                minWidth: 28,
+                padding: '3px 6px',
                 borderRadius: 6,
                 border: '1px solid var(--border-color)',
                 background: cardSize === size ? 'var(--accent-color)' : 'var(--bg-input)',
@@ -465,19 +465,19 @@ export default function MainContent() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>排序:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>排</span>
           {([
             ['name', '名称'],
-            ['lastUsed', '最近使用'],
-            ['useCount', '使用次数'],
-            ['createdAt', '添加时间'],
+            ['lastUsed', '最近'],
+            ['useCount', '次数'],
+            ['createdAt', '添加'],
           ] as [SortKey, string][]).map(([key, label]) => (
             <button
               key={key}
               onClick={() => handleSort(key)}
               style={{
-                padding: '3px 8px',
+                padding: '3px 7px',
                 borderRadius: 6,
                 border: '1px solid var(--border-color)',
                 background: sortKey === key ? 'var(--accent-color)' : 'var(--bg-input)',
