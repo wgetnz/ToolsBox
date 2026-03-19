@@ -150,6 +150,7 @@ export default function ToolCard({
         onDrop={event => {
           if (!customSortEnabled) return;
           event.preventDefault();
+          event.stopPropagation();
           onCustomDrop?.();
         }}
       >

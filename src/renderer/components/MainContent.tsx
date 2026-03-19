@@ -48,6 +48,13 @@ function scoreSearch(queryText: string, ...fields: Array<string | undefined>): n
   return score;
 }
 
+function isExternalImportDrag(event: React.DragEvent, draggingToolId: string | null): boolean {
+  if (draggingToolId) return false;
+
+  const types = Array.from(event.dataTransfer.types ?? []);
+  return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
+}
+
 export default function MainContent() {
   const {
     data,
@@ -441,21 +448,24 @@ export default function MainContent() {
 
   return (
     <div
-      style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}
       onClick={event => {
         const target = event.target as HTMLElement;
         if (target.closest('[data-tool-card="true"]') || target.closest('.context-menu')) return;
         if (selectedToolIds.length > 0) clearSelection();
       }}
       onDragEnter={event => {
+        if (!isExternalImportDrag(event, draggingToolId)) return;
         event.preventDefault();
         setIsDragging(true);
       }}
       onDragOver={event => {
+        if (!isExternalImportDrag(event, draggingToolId)) return;
         event.preventDefault();
         if (!isDragging) setIsDragging(true);
       }}
       onDragLeave={event => {
+        if (!isExternalImportDrag(event, draggingToolId)) return;
         event.preventDefault();
         const target = event.currentTarget as HTMLDivElement;
         const related = event.relatedTarget as Node | null;
@@ -464,6 +474,7 @@ export default function MainContent() {
         }
       }}
       onDrop={event => {
+        if (!isExternalImportDrag(event, draggingToolId)) return;
         event.preventDefault();
         setIsDragging(false);
 
@@ -672,7 +683,10 @@ export default function MainContent() {
                 tool={tool}
                 size={cardSize}
                 customSortEnabled={canCustomSort}
-                onCustomDragStart={() => setDraggingToolId(tool.id)}
+                onCustomDragStart={() => {
+                  setIsDragging(false);
+                  setDraggingToolId(tool.id);
+                }}
                 onCustomDrop={() => { void handleCustomReorder(tool.id); }}
                 onCustomDragEnd={() => setDraggingToolId(null)}
                 onEdit={t => setEditingTool(t)}
