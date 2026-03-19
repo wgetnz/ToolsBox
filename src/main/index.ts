@@ -23,12 +23,17 @@ let appData: AppData;
 let isQuitting = false;
 const GLOBAL_QUICK_LAUNCHER_ACCELERATOR = 'CommandOrControl+Shift+K';
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+const isMac = process.platform === 'darwin';
 
 if (!gotSingleInstanceLock) {
   app.quit();
 }
 
 app.setName('LaunchBox');
+app.setAboutPanelOptions({
+  applicationName: 'LaunchBox',
+  applicationVersion: app.getVersion(),
+});
 
 function resolveAppBundlePath(appPath: string): string {
   const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
@@ -309,11 +314,11 @@ function createWindow(): void {
     y: windowBounds?.y,
     minWidth: 800,
     minHeight: 550,
-    frame: false,
+    frame: !isMac ? false : true,
     title: 'LaunchBox',
     icon: fs.existsSync(appIconPath) ? nativeImage.createFromPath(appIconPath) : undefined,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    trafficLightPosition: isMac ? { x: 16, y: 16 } : undefined,
     backgroundColor: '#1a1a2e',
     webPreferences: {
       nodeIntegration: false,
@@ -341,6 +346,83 @@ function createWindow(): void {
 
   mainWindow.on('resize', saveWindowBounds);
   mainWindow.on('move', saveWindowBounds);
+}
+
+function setupApplicationMenu(): void {
+  if (!isMac) return;
+
+  const appName = app.getName();
+  const menu = Menu.buildFromTemplate([
+    {
+      label: appName,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '打开快速启动器',
+          accelerator: 'CmdOrCtrl+Shift+K',
+          click: () => openQuickLauncher(),
+        },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+      ],
+    },
+    {
+      label: '帮助',
+      submenu: [
+        { role: 'about' },
+      ],
+    },
+  ]);
+
+  Menu.setApplicationMenu(menu);
 }
 
 function saveWindowBounds(): void {
@@ -638,7 +720,7 @@ if (gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
-    if (process.platform === 'darwin') {
+    if (isMac) {
       const dockIconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
       if (fs.existsSync(dockIconPath)) {
         app.dock?.setIcon(dockIconPath);
@@ -646,6 +728,7 @@ if (gotSingleInstanceLock) {
     }
 
     appData = loadData();
+    setupApplicationMenu();
     setupIPC();
     createWindow();
     createTray();
