@@ -69,7 +69,12 @@ export default function MainContent() {
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
-  const [toolbarMenu, setToolbarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [toolbarMenu, setToolbarMenu] = useState<{
+    x: number;
+    y: number;
+    kind: 'display' | 'sort';
+    items: ContextMenuItem[];
+  } | null>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   const [lastSelectedToolId, setLastSelectedToolId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -89,20 +94,24 @@ export default function MainContent() {
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setToolbarMenu({
-      x: rect.left,
-      y: rect.bottom + 6,
-      items: ([
-        ['small', '小'],
-        ['medium', '中'],
-        ['large', '大'],
-      ] as const).map(([size, label]) => ({
-        label: label + (cardSize === size ? ' ✓' : ''),
-        onClick: () => {
-          if (!data) return;
-          void saveSettings({ ...data.settings, cardSize: size });
-        },
-      })),
+    setToolbarMenu(current => {
+      if (current?.kind === 'display') return null;
+      return {
+        x: rect.left,
+        y: rect.bottom + 6,
+        kind: 'display',
+        items: ([
+          ['small', '小'],
+          ['medium', '中'],
+          ['large', '大'],
+        ] as const).map(([size, label]) => ({
+          label: label + (cardSize === size ? ' ✓' : ''),
+          onClick: () => {
+            if (!data) return;
+            void saveSettings({ ...data.settings, cardSize: size });
+          },
+        })),
+      };
     });
   };
 
@@ -110,18 +119,22 @@ export default function MainContent() {
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setToolbarMenu({
-      x: rect.left,
-      y: rect.bottom + 6,
-      items: ([
-        ['name', '名称'],
-        ['lastUsed', '最近使用'],
-        ['useCount', '使用次数'],
-        ['createdAt', '添加时间'],
-      ] as [SortKey, string][]).map(([key, label]) => ({
-        label: `${label}${sortKey === key ? sortAsc ? ' ↑' : ' ↓' : ''}`,
-        onClick: () => handleSort(key),
-      })),
+    setToolbarMenu(current => {
+      if (current?.kind === 'sort') return null;
+      return {
+        x: rect.left,
+        y: rect.bottom + 6,
+        kind: 'sort',
+        items: ([
+          ['name', '名称'],
+          ['lastUsed', '最近使用'],
+          ['useCount', '使用次数'],
+          ['createdAt', '添加时间'],
+        ] as [SortKey, string][]).map(([key, label]) => ({
+          label: `${label}${sortKey === key ? sortAsc ? ' ↑' : ' ↓' : ''}`,
+          onClick: () => handleSort(key),
+        })),
+      };
     });
   };
 
