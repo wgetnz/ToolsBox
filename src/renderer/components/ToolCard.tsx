@@ -146,22 +146,21 @@ export default function ToolCard({
         }} />
 
         {/* Type badge */}
-        {!isCompact && (
-          <div style={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            background: accentColor + '22',
-            color: accentColor,
-            fontSize: 10,
-            fontWeight: 700,
-            padding: '2px 6px',
-            borderRadius: 6,
-            letterSpacing: '0.3px',
-          }}>
-            {TYPE_LABELS[tool.type]}
-          </div>
-        )}
+        <div style={{
+          position: 'absolute',
+          top: isCompact ? 6 : 8,
+          right: isCompact ? 6 : 8,
+          background: accentColor + '22',
+          color: accentColor,
+          fontSize: isCompact ? 9 : 10,
+          fontWeight: 700,
+          padding: isCompact ? '1px 5px' : '2px 6px',
+          borderRadius: 6,
+          letterSpacing: '0.3px',
+          lineHeight: 1.2,
+        }}>
+          {TYPE_LABELS[tool.type]}
+        </div>
 
         {selected && (
           <div style={{
