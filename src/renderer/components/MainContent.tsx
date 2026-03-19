@@ -6,7 +6,7 @@ import ToolCard from './ToolCard';
 import ToolModal from './ToolModal';
 import AppLibraryModal from './AppLibraryModal';
 
-type SortKey = 'name' | 'lastUsed' | 'useCount' | 'createdAt';
+type SortKey = 'custom' | 'name' | 'lastUsed' | 'useCount' | 'createdAt';
 
 const BATCH_COLORS = [
   '#4f8ef7', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
@@ -56,6 +56,7 @@ export default function MainContent() {
     launchTool,
     deleteTools,
     moveToolsToCategory,
+    reorderToolsCustom,
     updateToolsColor,
     saveTool,
     saveSettings,
@@ -80,6 +81,7 @@ export default function MainContent() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [moveTargetCategoryId, setMoveTargetCategoryId] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
+  const [draggingToolId, setDraggingToolId] = useState<string | null>(null);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -126,6 +128,7 @@ export default function MainContent() {
         y: rect.bottom + 6,
         kind: 'sort',
         items: ([
+          ['custom', '自定义排序'],
           ['name', '名称'],
           ['lastUsed', '最近使用'],
           ['useCount', '使用次数'],
@@ -159,6 +162,9 @@ export default function MainContent() {
 
       let val = 0;
       switch (sortKey) {
+        case 'custom':
+          val = a.tool.customOrder - b.tool.customOrder;
+          break;
         case 'name':
           val = a.tool.name.localeCompare(b.tool.name, 'zh-CN');
           break;
@@ -172,7 +178,7 @@ export default function MainContent() {
           val = b.tool.createdAt - a.tool.createdAt;
           break;
       }
-      return sortAsc ? val : -val;
+      return sortKey === 'custom' ? val : sortAsc ? val : -val;
     }).map(entry => entry.tool);
   }, [data, selectedCategoryId, searchQuery, sortKey, sortAsc]);
 
@@ -185,6 +191,13 @@ export default function MainContent() {
   }
 
   const cardSize = data.settings.cardSize;
+  const currentSortLabel = {
+    custom: '自定义排序',
+    name: '名称',
+    lastUsed: '最近使用',
+    useCount: '使用次数',
+    createdAt: '添加时间',
+  }[sortKey];
 
   const categoryName = selectedCategoryId === 'all'
     ? '全部工具'
@@ -253,6 +266,22 @@ export default function MainContent() {
 
   const handleRecolorSelected = async (color: string) => {
     await updateToolsColor(selectedToolIds, color);
+  };
+
+  const canCustomSort = sortKey === 'custom' && !searchQuery;
+
+  const handleCustomReorder = async (targetToolId: string) => {
+    if (!draggingToolId || draggingToolId === targetToolId) return;
+
+    const nextOrder = [...filteredToolIds];
+    const fromIndex = nextOrder.indexOf(draggingToolId);
+    const targetIndex = nextOrder.indexOf(targetToolId);
+    if (fromIndex < 0 || targetIndex < 0) return;
+
+    const [movedId] = nextOrder.splice(fromIndex, 1);
+    nextOrder.splice(targetIndex, 0, movedId);
+    await reorderToolsCustom(nextOrder);
+    setDraggingToolId(null);
   };
 
   const toggleSelectionMode = () => {
@@ -387,6 +416,7 @@ export default function MainContent() {
         args: '',
         categoryId,
         color: type === 'app' ? '#007aff' : '#4f8ef7',
+        customOrder: data.tools.length + imported,
         useCount: 0,
         createdAt: Date.now(),
       });
@@ -516,7 +546,7 @@ export default function MainContent() {
 
         <button
           onClick={openSortMenu}
-          title={`排序: ${sortKey === 'name' ? '名称' : sortKey === 'lastUsed' ? '最近使用' : sortKey === 'useCount' ? '使用次数' : '添加时间'}`}
+          title={`排序: ${currentSortLabel}${sortKey === 'name' ? sortAsc ? '升序' : '降序' : ''}`}
           style={{
             width: 30,
             height: 30,
@@ -531,7 +561,7 @@ export default function MainContent() {
             justifyContent: 'center',
           }}
         >
-          ↕
+          ≡↕
         </button>
       </div>
 
@@ -641,6 +671,10 @@ export default function MainContent() {
                 key={tool.id}
                 tool={tool}
                 size={cardSize}
+                customSortEnabled={canCustomSort}
+                onCustomDragStart={() => setDraggingToolId(tool.id)}
+                onCustomDrop={() => { void handleCustomReorder(tool.id); }}
+                onCustomDragEnd={() => setDraggingToolId(null)}
                 onEdit={t => setEditingTool(t)}
                 selected={selectedSet.has(tool.id)}
                 onSelect={handleSelectTool}

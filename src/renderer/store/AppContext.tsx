@@ -12,6 +12,7 @@ declare global {
       saveCategory: (category: Category) => Promise<Category[]>;
       deleteCategory: (categoryId: string) => Promise<{ categories: Category[]; tools: Tool[] }>;
       moveToolsToCategory: (toolIds: string[], categoryId: string) => Promise<Tool[]>;
+      reorderToolsCustom: (toolIds: string[]) => Promise<Tool[]>;
       updateToolsColor: (toolIds: string[], color: string) => Promise<Tool[]>;
       saveSettings: (settings: AppSettings) => Promise<AppSettings>;
       launchTool: (toolId: string) => Promise<{ success: boolean; error?: string }>;
@@ -85,6 +86,7 @@ interface AppContextValue extends AppState {
   saveCategory: (category: Category) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   moveToolsToCategory: (toolIds: string[], categoryId: string) => Promise<void>;
+  reorderToolsCustom: (toolIds: string[]) => Promise<void>;
   updateToolsColor: (toolIds: string[], color: string) => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   launchTool: (toolId: string) => Promise<void>;
@@ -174,6 +176,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast('success', `已更新 ${toolIds.length} 个工具的颜色`);
   }, [showToast]);
 
+  const reorderToolsCustom = useCallback(async (toolIds: string[]) => {
+    if (toolIds.length === 0) return;
+    const tools = await window.launchbox.reorderToolsCustom(toolIds);
+    dispatch({ type: 'SET_TOOLS', payload: tools });
+    showToast('success', '自定义排序已更新');
+  }, [showToast]);
+
   const saveSettings = useCallback(async (settings: AppSettings) => {
     const saved = await window.launchbox.saveSettings(settings);
     dispatch({ type: 'SET_SETTINGS', payload: saved });
@@ -234,6 +243,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveCategory,
       deleteCategory,
       moveToolsToCategory,
+      reorderToolsCustom,
       updateToolsColor,
       saveSettings,
       launchTool,

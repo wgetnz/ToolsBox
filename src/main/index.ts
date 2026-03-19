@@ -118,6 +118,17 @@ function getResourcesDir(bundlePath: string): string {
   return bundlePath;
 }
 
+function normalizeCustomOrder(tools: Tool[]): Tool[] {
+  return [...tools]
+    .sort((a, b) => a.customOrder - b.customOrder || a.createdAt - b.createdAt)
+    .map((tool, index) => ({ ...tool, customOrder: index }));
+}
+
+function getNextCustomOrder(tools: Tool[]): number {
+  if (tools.length === 0) return 0;
+  return Math.max(...tools.map(tool => tool.customOrder)) + 1;
+}
+
 function resolveIcnsPath(bundlePath: string): string | null {
   const resourcesDir = getResourcesDir(bundlePath);
   if (!fs.existsSync(resourcesDir)) return null;
@@ -429,12 +440,15 @@ function setupIPC(): void {
       resolvedTool.id = createId();
       resolvedTool.createdAt = Date.now();
       resolvedTool.useCount = 0;
+      resolvedTool.customOrder = getNextCustomOrder(appData.tools);
       appData.tools.push(resolvedTool);
     } else {
       const idx = appData.tools.findIndex(t => t.id === resolvedTool.id);
       if (idx >= 0) {
+        resolvedTool.customOrder = appData.tools[idx].customOrder;
         appData.tools[idx] = resolvedTool;
       } else {
+        resolvedTool.customOrder = getNextCustomOrder(appData.tools);
         appData.tools.push(resolvedTool);
       }
     }
@@ -443,14 +457,14 @@ function setupIPC(): void {
   });
 
   ipcMain.handle('delete-tool', (_event, toolId: string) => {
-    appData.tools = appData.tools.filter(t => t.id !== toolId);
+    appData.tools = normalizeCustomOrder(appData.tools.filter(t => t.id !== toolId));
     saveData(appData);
     return appData.tools;
   });
 
   ipcMain.handle('delete-tools', (_event, toolIds: string[]) => {
     const removeSet = new Set(toolIds);
-    appData.tools = appData.tools.filter(t => !removeSet.has(t.id));
+    appData.tools = normalizeCustomOrder(appData.tools.filter(t => !removeSet.has(t.id)));
     saveData(appData);
     return appData.tools;
   });
@@ -486,6 +500,28 @@ function setupIPC(): void {
     appData.tools = appData.tools.map(tool =>
       moveSet.has(tool.id) ? { ...tool, categoryId } : tool
     );
+    saveData(appData);
+    return appData.tools;
+  });
+
+  ipcMain.handle('reorder-tools-custom', (_event, orderedToolIds: string[]) => {
+    const orderSet = new Set(orderedToolIds);
+    const currentOrdered = normalizeCustomOrder(appData.tools);
+    const reorderedSubset = orderedToolIds
+      .map(id => currentOrdered.find(tool => tool.id === id))
+      .filter((tool): tool is Tool => Boolean(tool));
+
+    let subsetIndex = 0;
+    const merged = currentOrdered
+      .map(tool => {
+        if (!orderSet.has(tool.id)) return tool;
+        const nextTool = reorderedSubset[subsetIndex];
+        subsetIndex += 1;
+        return nextTool;
+      })
+      .map((tool, index) => ({ ...tool, customOrder: index }));
+
+    appData.tools = merged;
     saveData(appData);
     return appData.tools;
   });

@@ -68,6 +68,7 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
     setCategoryId(defaultCategoryId);
   }, [defaultCategoryId]);
   const categories = data?.categories.filter(category => category.id !== 'all') ?? [];
+  const nextCustomOrder = data?.tools.length ?? 0;
   const existingAppPaths = new Set(
     (data?.tools ?? []).filter(tool => tool.type === 'app').map(tool => tool.path)
   );
@@ -105,6 +106,7 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
       categoryId,
       icon: entry.icon,
       color: '#007aff',
+      customOrder: nextCustomOrder,
       useCount: 0,
       createdAt: new Date().getTime(),
     };

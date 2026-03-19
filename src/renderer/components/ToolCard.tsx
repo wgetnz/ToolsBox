@@ -36,6 +36,10 @@ const TYPE_COLORS: Record<string, string> = {
 interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
+  customSortEnabled?: boolean;
+  onCustomDragStart?: () => void;
+  onCustomDrop?: () => void;
+  onCustomDragEnd?: () => void;
   onEdit: (tool: Tool) => void;
   selected?: boolean;
   onSelect?: (event: React.MouseEvent, tool: Tool) => void;
@@ -45,6 +49,10 @@ interface Props {
 export default function ToolCard({
   tool,
   size,
+  customSortEnabled = false,
+  onCustomDragStart,
+  onCustomDrop,
+  onCustomDragEnd,
   onEdit,
   selected = false,
   onSelect,
@@ -58,6 +66,7 @@ export default function ToolCard({
   const accentColor = tool.color || TYPE_COLORS[tool.type] || '#4f8ef7';
   const hasCustomIcon = Boolean(tool.icon) && !iconFailed;
   const isCompact = size === 'small';
+  const handleAreaSize = isCompact ? 18 : 22;
 
   const dims = {
     small: { width: 106, height: 88, iconSize: 22, nameFontSize: 11 },
@@ -123,6 +132,15 @@ export default function ToolCard({
         onMouseLeave={() => setHover(false)}
         onClick={event => onSelect?.(event, tool)}
         onContextMenu={handleContextMenu}
+        onDragOver={event => {
+          if (!customSortEnabled) return;
+          event.preventDefault();
+        }}
+        onDrop={event => {
+          if (!customSortEnabled) return;
+          event.preventDefault();
+          onCustomDrop?.();
+        }}
       >
         {/* Top accent strip */}
         <div style={{
@@ -140,6 +158,7 @@ export default function ToolCard({
           position: 'absolute',
           top: isCompact ? 6 : 8,
           right: isCompact ? 6 : 8,
+          maxWidth: `calc(100% - ${customSortEnabled ? handleAreaSize + 20 : 12}px)`,
           background: accentColor + '22',
           color: accentColor,
           fontSize: isCompact ? 9 : 10,
@@ -170,6 +189,42 @@ export default function ToolCard({
             boxShadow: `0 0 0 2px ${accentColor}20`,
           }}>
             ✓
+          </div>
+        )}
+
+        {customSortEnabled && (
+          <div
+            draggable
+            onClick={event => event.stopPropagation()}
+            onMouseDown={event => event.stopPropagation()}
+            onDragStart={event => {
+              event.stopPropagation();
+              event.dataTransfer.effectAllowed = 'move';
+              onCustomDragStart?.();
+            }}
+            onDragEnd={event => {
+              event.stopPropagation();
+              onCustomDragEnd?.();
+            }}
+            style={{
+              position: 'absolute',
+              top: isCompact ? 6 : 8,
+              left: isCompact ? 6 : 8,
+              width: handleAreaSize,
+              height: handleAreaSize,
+              borderRadius: 6,
+              background: 'rgba(15, 23, 42, 0.28)',
+              color: 'var(--text-muted)',
+              fontSize: isCompact ? 11 : 12,
+              cursor: 'grab',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              userSelect: 'none',
+            }}
+            title="拖拽调整顺序"
+          >
+            ≡
           </div>
         )}
 

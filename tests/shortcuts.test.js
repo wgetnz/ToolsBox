@@ -34,6 +34,7 @@ test('createToolShortcut creates a webloc file for url tools on macOS', () => {
     path: 'https://platform.openai.com/docs',
     args: '',
     categoryId: 'misc',
+    customOrder: 0,
     useCount: 0,
     createdAt: 1,
   }, defaultSettings, root, 'darwin');
@@ -53,6 +54,7 @@ test('createToolShortcut creates an executable command file for local tools on m
     path: '/tmp/demo script.sh',
     args: '--name "Launch Box"',
     categoryId: 'misc',
+    customOrder: 1,
     useCount: 0,
     createdAt: 1,
   }, defaultSettings, root, 'darwin');

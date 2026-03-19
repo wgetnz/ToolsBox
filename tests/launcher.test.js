@@ -33,6 +33,7 @@ test('buildCommand uses --args for mac app launch parameters', () => {
     path: '/System/Applications/FindMy.app',
     args: '--profile test "two words"',
     categoryId: 'misc',
+    customOrder: 0,
     useCount: 0,
     createdAt: 1,
   }, defaultSettings);

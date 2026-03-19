@@ -33,6 +33,7 @@ function emptyTool(initialValues?: Partial<Tool>): Partial<Tool> {
     args: '',
     categoryId: 'misc',
     color: '#4f8ef7',
+    customOrder: 0,
     useCount: 0,
     createdAt: Date.now(),
     ...initialValues,

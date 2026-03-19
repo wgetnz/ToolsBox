@@ -50,6 +50,8 @@ test('sanitizeTools removes invalid tools and fixes duplicate ids and missing ca
   assert.equal(tools[0].categoryId, 'misc');
   assert.equal(tools[1].categoryId, 'custom');
   assert.notEqual(tools[0].id, tools[1].id);
+  assert.equal(tools[0].customOrder, 0);
+  assert.equal(tools[1].customOrder, 1);
 });
 
 test('sanitizeData returns a complete normalized app data object', () => {
@@ -66,5 +68,6 @@ test('sanitizeData returns a complete normalized app data object', () => {
   assert.equal(data.settings.enableGlobalQuickLauncher, true);
   assert.ok(data.categories.some(category => category.id === 'ops'));
   assert.equal(data.tools[0].categoryId, 'ops');
+  assert.equal(data.tools[0].customOrder, 0);
   assert.equal(data.tools[0].useCount, 0);
 });

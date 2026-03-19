@@ -172,11 +172,14 @@ export function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Ca
         pythonEnvId: typeof tool.pythonEnvId === 'string' ? tool.pythonEnvId : undefined,
         icon: typeof tool.icon === 'string' && tool.icon.trim() ? tool.icon : undefined,
         color: typeof tool.color === 'string' && tool.color.trim() ? tool.color : undefined,
+        customOrder: typeof tool.customOrder === 'number' ? tool.customOrder : 0,
         lastUsed: typeof tool.lastUsed === 'number' ? tool.lastUsed : undefined,
         useCount: typeof tool.useCount === 'number' && tool.useCount >= 0 ? tool.useCount : 0,
         createdAt: typeof tool.createdAt === 'number' ? tool.createdAt : Date.now(),
       };
-    });
+    })
+    .sort((a, b) => a.customOrder - b.customOrder || a.createdAt - b.createdAt)
+    .map((tool, index) => ({ ...tool, customOrder: index }));
 }
 
 export function sanitizeData(data: Partial<AppData>): AppData {

@@ -24,6 +24,7 @@ export interface Tool {
   pythonEnvId?: string;
   icon?: string;
   color?: string;
+  customOrder: number;
   lastUsed?: number;
   useCount: number;
   createdAt: number;
@@ -75,6 +76,7 @@ export type IpcChannel =
   | 'save-category'
   | 'delete-category'
   | 'move-tools-to-category'
+  | 'reorder-tools-custom'
   | 'update-tools-color'
   | 'save-settings'
   | 'get-settings'
