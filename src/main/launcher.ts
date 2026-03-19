@@ -9,7 +9,7 @@ function getPlatform(): 'mac' | 'win' | 'linux' {
   return 'linux';
 }
 
-function parseArgs(input: string): string[] {
+export function parseArgs(input: string): string[] {
   const args: string[] = [];
   let current = '';
   let quote: '"' | "'" | null = null;
@@ -57,7 +57,7 @@ function parseArgs(input: string): string[] {
   return args;
 }
 
-function buildCommand(tool: Tool, settings: AppSettings): { cmd: string; args: string[]; opts: object } {
+export function buildCommand(tool: Tool, settings: AppSettings): { cmd: string; args: string[]; opts: object } {
   const platform = getPlatform();
   const extraArgs = tool.args ? parseArgs(tool.args) : [];
 
@@ -117,7 +117,11 @@ function buildCommand(tool: Tool, settings: AppSettings): { cmd: string; args: s
 
     case 'app': {
       if (platform === 'mac') {
-        return { cmd: 'open', args: [tool.path, ...extraArgs], opts: {} };
+        return {
+          cmd: 'open',
+          args: extraArgs.length > 0 ? ['-a', tool.path, '--args', ...extraArgs] : ['-a', tool.path],
+          opts: {},
+        };
       }
       return { cmd: tool.path, args: extraArgs, opts: {} };
     }
