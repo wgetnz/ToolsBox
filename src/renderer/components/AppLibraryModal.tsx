@@ -14,15 +14,20 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
   const [query, setQuery] = React.useState('');
   const [categoryId, setCategoryId] = React.useState(defaultCategoryId);
   const [addingIds, setAddingIds] = React.useState<string[]>([]);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const refreshLibrary = React.useCallback(async () => {
+    setRefreshing(true);
+    setLoading(true);
+    const library = await getAppLibrary();
+    setEntries(library);
+    setLoading(false);
+    setRefreshing(false);
+  }, [getAppLibrary]);
 
   React.useEffect(() => {
-    void (async () => {
-      setLoading(true);
-      const library = await getAppLibrary();
-      setEntries(library);
-      setLoading(false);
-    })();
-  }, [getAppLibrary]);
+    void refreshLibrary();
+  }, [refreshLibrary]);
 
   React.useEffect(() => {
     setCategoryId(defaultCategoryId);
@@ -73,7 +78,7 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
         </div>
 
         <div className="modal-body" style={{ paddingBottom: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px auto', gap: 12 }}>
             <input
               className="input"
               value={query}
@@ -91,6 +96,13 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
                 </option>
               ))}
             </select>
+            <button
+              className="btn btn-secondary"
+              onClick={() => { void refreshLibrary(); }}
+              disabled={refreshing}
+            >
+              {refreshing ? '刷新中...' : '刷新'}
+            </button>
           </div>
 
           {loading ? (
@@ -113,7 +125,12 @@ export default function AppLibraryModal({ defaultCategoryId, onClose }: Props) {
                       {entry.icon ? <img src={entry.icon} alt={entry.name} /> : <span>📱</span>}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div className="app-library-name">{entry.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div className="app-library-name" style={{ marginBottom: 0 }}>{entry.name}</div>
+                        <span className={`app-library-badge ${entry.source === 'system' ? 'system' : 'user'}`}>
+                          {entry.source === 'system' ? '系统' : '本地'}
+                        </span>
+                      </div>
                       <div className="app-library-path">{entry.path}</div>
                     </div>
                     <button

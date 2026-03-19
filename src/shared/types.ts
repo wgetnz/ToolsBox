@@ -61,6 +61,7 @@ export interface AppLibraryEntry {
   name: string;
   path: string;
   icon?: string;
+  source?: 'system' | 'user';
 }
 
 export type IpcChannel =

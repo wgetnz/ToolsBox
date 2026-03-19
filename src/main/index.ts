@@ -226,6 +226,7 @@ function scanMacApps(): string[] {
   const homeDir = app.getPath('home');
   const roots = [
     '/Applications',
+    '/System/Applications',
     path.join(homeDir, 'Applications'),
   ];
   const discovered = new Set<string>();
@@ -257,6 +258,10 @@ function scanMacApps(): string[] {
   return Array.from(discovered).sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
 
+function getAppLibrarySource(appPath: string): 'system' | 'user' {
+  return appPath.startsWith('/System/Applications') ? 'system' : 'user';
+}
+
 async function getAppLibrary(): Promise<AppLibraryEntry[]> {
   if (process.platform !== 'darwin') return [];
 
@@ -266,6 +271,7 @@ async function getAppLibrary(): Promise<AppLibraryEntry[]> {
     name: path.basename(appPath, '.app'),
     path: appPath,
     icon: loadAppBundleIcon(appPath),
+    source: getAppLibrarySource(appPath),
   }));
 }
 
