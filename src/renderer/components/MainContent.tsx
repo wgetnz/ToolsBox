@@ -91,7 +91,7 @@ export default function MainContent() {
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
   const [showAppLibrary, setShowAppLibrary] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortKey, setSortKey] = useState<SortKey>('custom');
   const [sortAsc, setSortAsc] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [toolbarMenu, setToolbarMenu] = useState<{
@@ -572,6 +572,20 @@ export default function MainContent() {
 
         <div style={{ flex: 1 }} />
 
+        {canCustomSort && (
+          <div style={{
+            padding: '4px 8px',
+            borderRadius: 999,
+            background: 'rgba(79, 142, 247, 0.16)',
+            color: 'var(--accent-color)',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.3px',
+          }}>
+            拖排中
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
             onClick={toggleSelectionMode}
@@ -617,9 +631,9 @@ export default function MainContent() {
             width: 30,
             height: 30,
             borderRadius: 8,
-            border: '1px solid var(--border-color)',
-            background: 'var(--bg-input)',
-            color: 'var(--text-secondary)',
+            border: `1px solid ${canCustomSort ? 'var(--accent-color)' : 'var(--border-color)'}`,
+            background: canCustomSort ? 'rgba(79, 142, 247, 0.14)' : 'var(--bg-input)',
+            color: canCustomSort ? 'var(--accent-color)' : 'var(--text-secondary)',
             cursor: 'pointer',
             fontSize: 14,
             display: 'flex',
