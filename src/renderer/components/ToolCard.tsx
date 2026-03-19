@@ -37,9 +37,9 @@ interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
   customSortEnabled?: boolean;
-  onCustomDragStart?: () => void;
-  onCustomDrop?: () => void;
-  onCustomDragEnd?: () => void;
+  customSortActive?: boolean;
+  onCustomSortStart?: () => void;
+  onCustomSortHover?: () => void;
   onEdit: (tool: Tool) => void;
   selected?: boolean;
   onSelect?: (event: React.MouseEvent, tool: Tool) => void;
@@ -50,9 +50,9 @@ export default function ToolCard({
   tool,
   size,
   customSortEnabled = false,
-  onCustomDragStart,
-  onCustomDrop,
-  onCustomDragEnd,
+  customSortActive = false,
+  onCustomSortStart,
+  onCustomSortHover,
   onEdit,
   selected = false,
   onSelect,
@@ -74,18 +74,11 @@ export default function ToolCard({
     large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
   }[size];
   const iconSize = dims.iconSize;
-  const handleCustomDragStart = (event: React.DragEvent) => {
-    if (!customSortEnabled) return;
+  const handleCustomSortStart = (event: React.MouseEvent) => {
+    if (!customSortEnabled || event.button !== 0) return;
     event.stopPropagation();
-    event.dataTransfer.setData('text/plain', tool.id);
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.dropEffect = 'move';
-    onCustomDragStart?.();
-  };
-  const handleCustomDragEnd = (event: React.DragEvent) => {
-    if (!customSortEnabled) return;
-    event.stopPropagation();
-    onCustomDragEnd?.();
+    event.preventDefault();
+    onCustomSortStart?.();
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -126,7 +119,7 @@ export default function ToolCard({
           border: `1px solid ${
             selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'
           }`,
-          cursor: 'pointer',
+          cursor: customSortEnabled ? customSortActive ? 'grabbing' : 'default' : 'pointer',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -143,18 +136,12 @@ export default function ToolCard({
         }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
+        onMouseMove={() => {
+          if (!customSortEnabled || !customSortActive) return;
+          onCustomSortHover?.();
+        }}
         onClick={event => onSelect?.(event, tool)}
         onContextMenu={handleContextMenu}
-        onDragOver={event => {
-          if (!customSortEnabled) return;
-          event.preventDefault();
-        }}
-        onDrop={event => {
-          if (!customSortEnabled) return;
-          event.preventDefault();
-          event.stopPropagation();
-          onCustomDrop?.();
-        }}
       >
         {/* Top accent strip */}
         <div style={{
@@ -208,11 +195,8 @@ export default function ToolCard({
 
         {customSortEnabled && (
           <div
-            draggable
             onClick={event => event.stopPropagation()}
-            onMouseDown={event => event.stopPropagation()}
-            onDragStart={handleCustomDragStart}
-            onDragEnd={handleCustomDragEnd}
+            onMouseDown={handleCustomSortStart}
             style={{
               position: 'absolute',
               top: isCompact ? 6 : 8,
@@ -223,7 +207,7 @@ export default function ToolCard({
               background: 'rgba(15, 23, 42, 0.28)',
               color: 'var(--text-muted)',
               fontSize: isCompact ? 11 : 12,
-              cursor: 'grab',
+              cursor: customSortActive ? 'grabbing' : 'grab',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -237,10 +221,12 @@ export default function ToolCard({
 
         {/* Icon */}
         <div
-          draggable={customSortEnabled}
-          onDragStart={handleCustomDragStart}
-          onDragEnd={handleCustomDragEnd}
-          title={customSortEnabled ? '拖动图标调整顺序' : undefined}
+          onClick={event => {
+            if (!customSortEnabled) return;
+            event.stopPropagation();
+          }}
+          onMouseDown={handleCustomSortStart}
+          title={customSortEnabled ? '按住拖动图标调整顺序' : undefined}
           style={{
             width: isCompact ? iconSize + 8 : iconSize + 16,
             height: isCompact ? iconSize + 8 : iconSize + 16,
@@ -253,7 +239,7 @@ export default function ToolCard({
             transition: 'transform 0.15s',
             transform: hover ? 'scale(1.05)' : 'scale(1)',
             overflow: 'hidden',
-            cursor: customSortEnabled ? 'grab' : 'inherit',
+            cursor: customSortEnabled ? customSortActive ? 'grabbing' : 'grab' : 'inherit',
             userSelect: 'none',
           }}
         >
@@ -261,7 +247,6 @@ export default function ToolCard({
             <img
               src={tool.icon}
               alt={tool.name}
-              draggable={false}
               onError={() => setIconFailed(true)}
               style={{
                 width: isCompact ? iconSize + 2 : iconSize + 6,

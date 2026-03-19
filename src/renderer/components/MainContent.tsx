@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
@@ -55,6 +55,23 @@ function isExternalImportDrag(event: React.DragEvent, draggingToolId: string | n
   return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
 }
 
+function reorderToolIds(toolIds: string[], movingToolId: string, targetToolId: string): string[] {
+  if (movingToolId === targetToolId) return toolIds;
+
+  const nextOrder = [...toolIds];
+  const fromIndex = nextOrder.indexOf(movingToolId);
+  const targetIndex = nextOrder.indexOf(targetToolId);
+  if (fromIndex < 0 || targetIndex < 0) return toolIds;
+
+  const [movedId] = nextOrder.splice(fromIndex, 1);
+  nextOrder.splice(targetIndex, 0, movedId);
+  return nextOrder;
+}
+
+function sameToolOrder(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
 export default function MainContent() {
   const {
     data,
@@ -89,6 +106,7 @@ export default function MainContent() {
   const [moveTargetCategoryId, setMoveTargetCategoryId] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
   const [draggingToolId, setDraggingToolId] = useState<string | null>(null);
+  const [previewOrderIds, setPreviewOrderIds] = useState<string[] | null>(null);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -189,6 +207,43 @@ export default function MainContent() {
     }).map(entry => entry.tool);
   }, [data, selectedCategoryId, searchQuery, sortKey, sortAsc]);
 
+  const canCustomSort = sortKey === 'custom' && !searchQuery;
+  const previewToolMap = new Map(filtered.map(tool => [tool.id, tool]));
+  const displayTools = previewOrderIds
+    ? previewOrderIds
+      .map(id => previewToolMap.get(id))
+      .filter((tool): tool is Tool => Boolean(tool))
+    : filtered;
+  const filteredToolIds = filtered.map(tool => tool.id);
+  const displayToolIds = displayTools.map(tool => tool.id);
+  const filteredToolIdsKey = filteredToolIds.join('|');
+
+  useEffect(() => {
+    if (draggingToolId || !canCustomSort) return;
+    setPreviewOrderIds(null);
+  }, [draggingToolId, canCustomSort, filteredToolIdsKey]);
+
+  useEffect(() => {
+    if (!draggingToolId) return;
+
+    const finishCustomSort = () => {
+      const nextOrder = previewOrderIds ?? filteredToolIds;
+      if (!sameToolOrder(nextOrder, filteredToolIds)) {
+        void reorderToolsCustom(nextOrder);
+      }
+      setDraggingToolId(null);
+      setPreviewOrderIds(null);
+    };
+
+    window.addEventListener('mouseup', finishCustomSort);
+    window.addEventListener('blur', finishCustomSort);
+
+    return () => {
+      window.removeEventListener('mouseup', finishCustomSort);
+      window.removeEventListener('blur', finishCustomSort);
+    };
+  }, [draggingToolId, previewOrderIds, filteredToolIds, reorderToolsCustom]);
+
   if (!data) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -209,7 +264,6 @@ export default function MainContent() {
   const categoryName = selectedCategoryId === 'all'
     ? '全部工具'
     : data.categories.find(c => c.id === selectedCategoryId)?.name ?? '工具';
-  const filteredToolIds = filtered.map(tool => tool.id);
   const selectedSet = new Set(selectedToolIds);
   const nonAllCategories = data.categories.filter(category => category.id !== 'all');
 
@@ -275,20 +329,21 @@ export default function MainContent() {
     await updateToolsColor(selectedToolIds, color);
   };
 
-  const canCustomSort = sortKey === 'custom' && !searchQuery;
+  const handleCustomSortStart = (toolId: string) => {
+    if (!canCustomSort) return;
+    setIsDragging(false);
+    setDraggingToolId(toolId);
+    setPreviewOrderIds(displayToolIds);
+  };
 
-  const handleCustomReorder = async (targetToolId: string) => {
+  const handleCustomSortHover = (targetToolId: string) => {
     if (!draggingToolId || draggingToolId === targetToolId) return;
 
-    const nextOrder = [...filteredToolIds];
-    const fromIndex = nextOrder.indexOf(draggingToolId);
-    const targetIndex = nextOrder.indexOf(targetToolId);
-    if (fromIndex < 0 || targetIndex < 0) return;
-
-    const [movedId] = nextOrder.splice(fromIndex, 1);
-    nextOrder.splice(targetIndex, 0, movedId);
-    await reorderToolsCustom(nextOrder);
-    setDraggingToolId(null);
+    setPreviewOrderIds(currentOrder => {
+      const baseOrder = currentOrder ?? displayToolIds;
+      const nextOrder = reorderToolIds(baseOrder, draggingToolId, targetToolId);
+      return sameToolOrder(baseOrder, nextOrder) ? baseOrder : nextOrder;
+    });
   };
 
   const toggleSelectionMode = () => {
@@ -512,7 +567,7 @@ export default function MainContent() {
             background: 'var(--bg-tertiary)',
             padding: '2px 8px',
             borderRadius: 10,
-          }}>{filtered.length}</span>
+          }}>{displayTools.length}</span>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -656,7 +711,7 @@ export default function MainContent() {
           });
         }}
       >
-        {filtered.length === 0 ? (
+        {displayTools.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🔧</div>
             {searchQuery ? (
@@ -677,18 +732,15 @@ export default function MainContent() {
             flexWrap: 'wrap',
             gap: cardSize === 'small' ? 8 : cardSize === 'large' ? 20 : 16,
           }}>
-            {filtered.map(tool => (
+            {displayTools.map(tool => (
               <ToolCard
                 key={tool.id}
                 tool={tool}
                 size={cardSize}
                 customSortEnabled={canCustomSort}
-                onCustomDragStart={() => {
-                  setIsDragging(false);
-                  setDraggingToolId(tool.id);
-                }}
-                onCustomDrop={() => { void handleCustomReorder(tool.id); }}
-                onCustomDragEnd={() => setDraggingToolId(null)}
+                customSortActive={draggingToolId === tool.id}
+                onCustomSortStart={() => handleCustomSortStart(tool.id)}
+                onCustomSortHover={() => handleCustomSortHover(tool.id)}
                 onEdit={t => setEditingTool(t)}
                 selected={selectedSet.has(tool.id)}
                 onSelect={handleSelectTool}
