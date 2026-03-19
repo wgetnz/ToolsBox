@@ -32,6 +32,18 @@ function readBundleInfo(appPath: string): Record<string, unknown> | null {
   }
 }
 
+function getIconCacheDir(): string {
+  return path.join(app.getPath('userData'), 'icon-cache');
+}
+
+function ensureDir(dirPath: string): void {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function cacheFileNameForApp(appPath: string): string {
+  return Buffer.from(appPath).toString('base64').replace(/[\/+=]/g, '_');
+}
+
 function candidateIconNames(bundleInfo: Record<string, unknown>): string[] {
   const candidates = new Set<string>();
   const pushValue = (value: unknown) => {
@@ -80,9 +92,36 @@ function resolveIcnsPath(appPath: string): string | null {
   }
 }
 
+function extractIconFromAssetsCar(appPath: string, bundleInfo: Record<string, unknown> | null): string | null {
+  const resourcesDir = path.join(appPath, 'Contents', 'Resources');
+  const assetsCarPath = path.join(resourcesDir, 'Assets.car');
+  if (!fs.existsSync(assetsCarPath)) return null;
+
+  const iconName = bundleInfo && typeof bundleInfo.CFBundleIconName === 'string'
+    ? bundleInfo.CFBundleIconName
+    : null;
+  if (!iconName) return null;
+
+  const cacheDir = getIconCacheDir();
+  ensureDir(cacheDir);
+  const outputPath = path.join(cacheDir, `${cacheFileNameForApp(appPath)}.icns`);
+
+  try {
+    if (!fs.existsSync(outputPath)) {
+      execFileSync('/usr/bin/iconutil', ['-c', 'icns', assetsCarPath, iconName, '-o', outputPath], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+    }
+    return fs.existsSync(outputPath) ? outputPath : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadAppBundleIcon(appPath: string): string | undefined {
   try {
-    const icnsPath = resolveIcnsPath(appPath);
+    const bundleInfo = readBundleInfo(appPath);
+    const icnsPath = resolveIcnsPath(appPath) ?? extractIconFromAssetsCar(appPath, bundleInfo);
     if (!icnsPath) return undefined;
     const image = nativeImage.createFromPath(icnsPath);
     if (image.isEmpty()) return undefined;
