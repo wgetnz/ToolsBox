@@ -28,6 +28,8 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
+app.setName('LaunchBox');
+
 function resolveAppBundlePath(appPath: string): string {
   const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
   if (fs.existsSync(infoPlistPath)) return appPath;
@@ -287,6 +289,7 @@ async function getAppLibrary(): Promise<AppLibraryEntry[]> {
 
 function createWindow(): void {
   const { windowBounds } = appData.settings;
+  const appIconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
 
   mainWindow = new BrowserWindow({
     width: windowBounds?.width ?? 1200,
@@ -296,6 +299,8 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 550,
     frame: false,
+    title: 'LaunchBox',
+    icon: fs.existsSync(appIconPath) ? nativeImage.createFromPath(appIconPath) : undefined,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#1a1a2e',
@@ -370,6 +375,7 @@ function createTray(): void {
   const trayIcon = fs.existsSync(iconPath)
     ? nativeImage.createFromPath(iconPath)
     : nativeImage.createEmpty();
+  trayIcon.setTemplateImage(true);
 
   tray = new Tray(trayIcon);
   tray.setToolTip('LaunchBox');
@@ -596,6 +602,13 @@ if (gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
+    if (process.platform === 'darwin') {
+      const dockIconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
+      if (fs.existsSync(dockIconPath)) {
+        app.dock?.setIcon(dockIconPath);
+      }
+    }
+
     appData = loadData();
     setupIPC();
     createWindow();
