@@ -226,6 +226,19 @@ export default function MainContent() {
   useEffect(() => {
     if (!draggingToolId) return;
 
+    const handlePointerMove = (event: MouseEvent) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      const card = target?.closest<HTMLElement>('[data-tool-id]');
+      const targetToolId = card?.dataset.toolId;
+      if (!targetToolId || targetToolId === draggingToolId) return;
+
+      setPreviewOrderIds(currentOrder => {
+        const baseOrder = currentOrder ?? displayToolIds;
+        const nextOrder = reorderToolIds(baseOrder, draggingToolId, targetToolId);
+        return sameToolOrder(baseOrder, nextOrder) ? baseOrder : nextOrder;
+      });
+    };
+
     const finishCustomSort = () => {
       const nextOrder = previewOrderIds ?? filteredToolIds;
       if (!sameToolOrder(nextOrder, filteredToolIds)) {
@@ -235,14 +248,16 @@ export default function MainContent() {
       setPreviewOrderIds(null);
     };
 
+    window.addEventListener('mousemove', handlePointerMove);
     window.addEventListener('mouseup', finishCustomSort);
     window.addEventListener('blur', finishCustomSort);
 
     return () => {
+      window.removeEventListener('mousemove', handlePointerMove);
       window.removeEventListener('mouseup', finishCustomSort);
       window.removeEventListener('blur', finishCustomSort);
     };
-  }, [draggingToolId, previewOrderIds, filteredToolIds, reorderToolsCustom]);
+  }, [draggingToolId, previewOrderIds, filteredToolIds, displayToolIds, reorderToolsCustom]);
 
   if (!data) {
     return (
@@ -334,16 +349,6 @@ export default function MainContent() {
     setIsDragging(false);
     setDraggingToolId(toolId);
     setPreviewOrderIds(displayToolIds);
-  };
-
-  const handleCustomSortHover = (targetToolId: string) => {
-    if (!draggingToolId || draggingToolId === targetToolId) return;
-
-    setPreviewOrderIds(currentOrder => {
-      const baseOrder = currentOrder ?? displayToolIds;
-      const nextOrder = reorderToolIds(baseOrder, draggingToolId, targetToolId);
-      return sameToolOrder(baseOrder, nextOrder) ? baseOrder : nextOrder;
-    });
   };
 
   const toggleSelectionMode = () => {
@@ -752,10 +757,8 @@ export default function MainContent() {
                 tool={tool}
                 size={cardSize}
                 customSortEnabled={canCustomSort}
-                customSortDragging={Boolean(draggingToolId)}
                 customSortActive={draggingToolId === tool.id}
                 onCustomSortStart={() => handleCustomSortStart(tool.id)}
-                onCustomSortHover={() => handleCustomSortHover(tool.id)}
                 onEdit={t => setEditingTool(t)}
                 selected={selectedSet.has(tool.id)}
                 onSelect={handleSelectTool}

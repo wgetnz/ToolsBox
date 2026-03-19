@@ -37,10 +37,8 @@ interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
   customSortEnabled?: boolean;
-  customSortDragging?: boolean;
   customSortActive?: boolean;
   onCustomSortStart?: () => void;
-  onCustomSortHover?: () => void;
   onEdit: (tool: Tool) => void;
   selected?: boolean;
   onSelect?: (event: React.MouseEvent, tool: Tool) => void;
@@ -51,10 +49,8 @@ export default function ToolCard({
   tool,
   size,
   customSortEnabled = false,
-  customSortDragging = false,
   customSortActive = false,
   onCustomSortStart,
-  onCustomSortHover,
   onEdit,
   selected = false,
   onSelect,
@@ -113,6 +109,7 @@ export default function ToolCard({
     <>
       <div
         data-tool-card="true"
+        data-tool-id={tool.id}
         style={{
           width: dims.width,
           height: dims.height,
@@ -136,16 +133,8 @@ export default function ToolCard({
           transform: hover && !isCompact ? 'translateY(-2px)' : 'none',
           overflow: 'hidden',
         }}
-        onMouseEnter={() => {
-          setHover(true);
-          if (!customSortEnabled || !customSortDragging) return;
-          onCustomSortHover?.();
-        }}
+        onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
-        onMouseMove={() => {
-          if (!customSortEnabled || !customSortDragging) return;
-          onCustomSortHover?.();
-        }}
         onClick={event => onSelect?.(event, tool)}
         onContextMenu={handleContextMenu}
       >
