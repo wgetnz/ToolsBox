@@ -20,7 +20,13 @@ import { createToolShortcut } from './shortcuts';
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
+let isQuitting = false;
 const GLOBAL_QUICK_LAUNCHER_ACCELERATOR = 'CommandOrControl+Shift+K';
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
 
 function resolveAppBundlePath(appPath: string): string {
   const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
@@ -309,7 +315,7 @@ function createWindow(): void {
   });
 
   mainWindow.on('close', (event) => {
-    if (appData.settings.minimizeToTray && tray) {
+    if (!isQuitting && appData.settings.minimizeToTray && tray) {
       event.preventDefault();
       mainWindow?.hide();
     } else {
@@ -386,6 +392,7 @@ function createTray(): void {
     {
       label: '退出',
       click: () => {
+        isQuitting = true;
         saveWindowBounds();
         app.quit();
       },
@@ -583,29 +590,37 @@ function setupIPC(): void {
   });
 }
 
-app.whenReady().then(() => {
-  appData = loadData();
-  setupIPC();
-  createWindow();
-  createTray();
-  syncGlobalQuickLauncherShortcut();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    } else {
-      showMainWindow();
-    }
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    showMainWindow();
   });
-});
+
+  app.whenReady().then(() => {
+    appData = loadData();
+    setupIPC();
+    createWindow();
+    createTray();
+    syncGlobalQuickLauncherShortcut();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      } else {
+        showMainWindow();
+      }
+    });
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    isQuitting = true;
     app.quit();
   }
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   globalShortcut.unregisterAll();
   saveWindowBounds();
 });
