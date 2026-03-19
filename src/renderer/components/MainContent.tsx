@@ -130,7 +130,6 @@ export default function MainContent() {
   }
 
   const cardSize = data.settings.cardSize;
-  const iconDisplaySize = data.settings.iconDisplaySize;
 
   const categoryName = selectedCategoryId === 'all'
     ? '全部工具'
@@ -410,19 +409,19 @@ export default function MainContent() {
 
         {/* Sort */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>图标:</span>
+          <span>显示:</span>
           {(['small', 'medium', 'large'] as const).map(size => (
             <button
               key={size}
               onClick={() => {
-                void saveSettings({ ...data.settings, iconDisplaySize: size });
+                void saveSettings({ ...data.settings, cardSize: size });
               }}
               style={{
                 padding: '3px 8px',
                 borderRadius: 6,
                 border: '1px solid var(--border-color)',
-                background: iconDisplaySize === size ? 'var(--accent-color)' : 'var(--bg-input)',
-                color: iconDisplaySize === size ? '#fff' : 'var(--text-secondary)',
+                background: cardSize === size ? 'var(--accent-color)' : 'var(--bg-input)',
+                color: cardSize === size ? '#fff' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 fontSize: 11,
                 fontWeight: 500,
@@ -564,14 +563,13 @@ export default function MainContent() {
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: cardSize === 'small' ? 12 : cardSize === 'large' ? 20 : 16,
+            gap: cardSize === 'small' ? 8 : cardSize === 'large' ? 20 : 16,
           }}>
             {filtered.map(tool => (
               <ToolCard
                 key={tool.id}
                 tool={tool}
                 size={cardSize}
-                iconDisplaySize={iconDisplaySize}
                 onEdit={t => setEditingTool(t)}
                 selected={selectedSet.has(tool.id)}
                 onSelect={handleSelectTool}

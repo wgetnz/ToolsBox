@@ -13,7 +13,6 @@ export default function SettingsPanel({ onClose }: Props) {
       theme: 'dark',
       fontSize: 'medium',
       cardSize: 'medium',
-      iconDisplaySize: 'medium',
       javaEnvs: [],
       pythonEnvs: [],
       hoverSwitchCategories: true,
@@ -162,29 +161,13 @@ export default function SettingsPanel({ onClose }: Props) {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">卡片大小</label>
+                  <label className="form-label">显示密度</label>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {(['small', 'medium', 'large'] as const).map(s => (
                       <button
                         key={s}
                         onClick={() => update('cardSize', s)}
                         className={`btn ${form.cardSize === s ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ flex: 1 }}
-                      >
-                        {s === 'small' ? '紧凑' : s === 'medium' ? '标准' : '宽松'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">图标显示</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {(['small', 'medium', 'large'] as const).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => update('iconDisplaySize', s)}
-                        className={`btn ${form.iconDisplaySize === s ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ flex: 1 }}
                       >
                         {s === 'small' ? '小' : s === 'medium' ? '中' : '大'}

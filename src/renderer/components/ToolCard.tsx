@@ -36,7 +36,6 @@ const TYPE_COLORS: Record<string, string> = {
 interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
-  iconDisplaySize: 'small' | 'medium' | 'large';
   onEdit: (tool: Tool) => void;
   selected?: boolean;
   onSelect?: (event: React.MouseEvent, tool: Tool) => void;
@@ -46,7 +45,6 @@ interface Props {
 export default function ToolCard({
   tool,
   size,
-  iconDisplaySize,
   onEdit,
   selected = false,
   onSelect,
@@ -60,17 +58,14 @@ export default function ToolCard({
 
   const accentColor = tool.color || TYPE_COLORS[tool.type] || '#4f8ef7';
   const hasCustomIcon = Boolean(tool.icon) && !iconFailed;
+  const isCompact = size === 'small';
 
   const dims = {
-    small: { width: 140, height: 110, iconSize: 28, nameFontSize: 12 },
+    small: { width: 106, height: 88, iconSize: 22, nameFontSize: 11 },
     medium: { width: 180, height: 140, iconSize: 36, nameFontSize: 14 },
     large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
   }[size];
-  const iconSize = {
-    small: Math.max(20, dims.iconSize - 8),
-    medium: dims.iconSize,
-    large: dims.iconSize + 10,
-  }[iconDisplaySize];
+  const iconSize = dims.iconSize;
 
   const handleLaunch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -113,24 +108,24 @@ export default function ToolCard({
         style={{
           width: dims.width,
           height: dims.height,
-          background: selected ? `${accentColor}18` : hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
-          borderRadius: 14,
-          border: `1px solid ${
-            selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'
-          }`,
+          background: isCompact ? 'transparent' : selected ? `${accentColor}18` : hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
+          borderRadius: isCompact ? 10 : 14,
+          border: isCompact
+            ? `1px solid ${selected ? accentColor + '55' : 'transparent'}`
+            : `1px solid ${selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'}`,
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 8,
-          padding: 12,
+          gap: isCompact ? 6 : 8,
+          padding: isCompact ? '8px 6px' : 12,
           position: 'relative',
           transition: 'all 0.15s ease',
-          boxShadow: selected
+          boxShadow: isCompact ? 'none' : selected
             ? `0 10px 28px ${accentColor}26`
             : hover ? `0 8px 24px ${accentColor}20` : 'none',
-          transform: hover ? 'translateY(-2px)' : 'none',
+          transform: hover && !isCompact ? 'translateY(-2px)' : 'none',
           overflow: 'hidden',
         }}
         onMouseEnter={() => setHover(true)}
@@ -140,43 +135,47 @@ export default function ToolCard({
         onContextMenu={handleContextMenu}
       >
         {/* Top accent strip */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 3,
-          background: accentColor,
-          borderRadius: '14px 14px 0 0',
-        }} />
+        {!isCompact && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: accentColor,
+            borderRadius: '14px 14px 0 0',
+          }} />
+        )}
 
         {/* Type badge */}
-        <div style={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          background: accentColor + '22',
-          color: accentColor,
-          fontSize: 10,
-          fontWeight: 700,
-          padding: '2px 6px',
-          borderRadius: 6,
-          letterSpacing: '0.3px',
-        }}>
-          {TYPE_LABELS[tool.type]}
-        </div>
+        {!isCompact && (
+          <div style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            background: accentColor + '22',
+            color: accentColor,
+            fontSize: 10,
+            fontWeight: 700,
+            padding: '2px 6px',
+            borderRadius: 6,
+            letterSpacing: '0.3px',
+          }}>
+            {TYPE_LABELS[tool.type]}
+          </div>
+        )}
 
         {selected && (
           <div style={{
             position: 'absolute',
             top: 8,
             left: 8,
-            width: 18,
-            height: 18,
+            width: isCompact ? 14 : 18,
+            height: isCompact ? 14 : 18,
             borderRadius: 999,
             background: accentColor,
             color: '#fff',
-            fontSize: 11,
+            fontSize: isCompact ? 9 : 11,
             fontWeight: 700,
             display: 'flex',
             alignItems: 'center',
@@ -189,10 +188,10 @@ export default function ToolCard({
 
         {/* Icon */}
         <div style={{
-          width: iconSize + 16,
-          height: iconSize + 16,
-          background: accentColor + '18',
-          borderRadius: 12,
+          width: isCompact ? iconSize + 8 : iconSize + 16,
+          height: isCompact ? iconSize + 8 : iconSize + 16,
+          background: isCompact ? 'transparent' : accentColor + '18',
+          borderRadius: isCompact ? 0 : 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -207,8 +206,8 @@ export default function ToolCard({
               alt={tool.name}
               onError={() => setIconFailed(true)}
               style={{
-                width: iconSize + 6,
-                height: iconSize + 6,
+                width: isCompact ? iconSize : iconSize + 6,
+                height: isCompact ? iconSize : iconSize + 6,
                 objectFit: 'contain',
               }}
             />
@@ -224,10 +223,14 @@ export default function ToolCard({
           color: 'var(--text-primary)',
           textAlign: 'center',
           width: '100%',
+          maxWidth: '100%',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
+          whiteSpace: isCompact ? 'normal' : 'nowrap',
           lineHeight: 1.3,
+          display: '-webkit-box',
+          WebkitLineClamp: isCompact ? 2 : 1,
+          WebkitBoxOrient: 'vertical',
         }}>
           {tool.name}
         </div>
@@ -248,7 +251,7 @@ export default function ToolCard({
         )}
 
         {/* Launch button overlay on hover */}
-        {hover && (
+        {hover && !isCompact && (
           <button
             style={{
               position: 'absolute',
@@ -274,7 +277,7 @@ export default function ToolCard({
         )}
 
         {/* Use count */}
-        {tool.useCount > 0 && (
+        {tool.useCount > 0 && !isCompact && (
           <div style={{
             position: 'absolute',
             bottom: 8,

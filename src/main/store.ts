@@ -19,7 +19,6 @@ const defaultSettings: AppSettings = {
   theme: 'dark',
   fontSize: 'medium',
   cardSize: 'medium',
-  iconDisplaySize: 'medium',
   javaEnvs: [],
   pythonEnvs: [],
   hoverSwitchCategories: true,
@@ -38,7 +37,6 @@ const defaultData: AppData = {
 const validThemes = new Set<AppSettings['theme']>(['dark', 'light']);
 const validFontSizes = new Set<AppSettings['fontSize']>(['small', 'medium', 'large']);
 const validCardSizes = new Set<AppSettings['cardSize']>(['small', 'medium', 'large']);
-const validIconDisplaySizes = new Set<AppSettings['iconDisplaySize']>(['small', 'medium', 'large']);
 const validToolTypes = new Set<Tool['type']>(['jar', 'python', 'shell', 'executable', 'app', 'batch', 'url']);
 
 function getDataPath(): string {
@@ -62,9 +60,6 @@ export function sanitizeSettings(settings: Partial<AppSettings> | undefined): Ap
   nextSettings.theme = validThemes.has(nextSettings.theme) ? nextSettings.theme : defaultSettings.theme;
   nextSettings.fontSize = validFontSizes.has(nextSettings.fontSize) ? nextSettings.fontSize : defaultSettings.fontSize;
   nextSettings.cardSize = validCardSizes.has(nextSettings.cardSize) ? nextSettings.cardSize : defaultSettings.cardSize;
-  nextSettings.iconDisplaySize = validIconDisplaySizes.has(nextSettings.iconDisplaySize)
-    ? nextSettings.iconDisplaySize
-    : defaultSettings.iconDisplaySize;
   nextSettings.hoverSwitchCategories = typeof nextSettings.hoverSwitchCategories === 'boolean'
     ? nextSettings.hoverSwitchCategories
     : defaultSettings.hoverSwitchCategories;
