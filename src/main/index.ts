@@ -9,6 +9,7 @@ import {
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { execFileSync } from 'child_process';
 import { AppData, Tool, Category, AppSettings, AppLibraryEntry } from '../shared/types';
 import { loadData, saveData, createId } from './store';
 import { launchTool, openInTerminal, showInFinder } from './launcher';
@@ -16,6 +17,104 @@ import { launchTool, openInTerminal, showInFinder } from './launcher';
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
+
+function readBundleInfo(appPath: string): Record<string, unknown> | null {
+  try {
+    const plistPath = path.join(appPath, 'Contents', 'Info.plist');
+    if (!fs.existsSync(plistPath)) return null;
+    const output = execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', plistPath], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return JSON.parse(output) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function candidateIconNames(bundleInfo: Record<string, unknown>): string[] {
+  const candidates = new Set<string>();
+  const pushValue = (value: unknown) => {
+    if (typeof value === 'string' && value.trim()) candidates.add(value.trim());
+    if (Array.isArray(value)) {
+      value.forEach(item => {
+        if (typeof item === 'string' && item.trim()) candidates.add(item.trim());
+      });
+    }
+  };
+
+  pushValue(bundleInfo.CFBundleIconFile);
+  pushValue(bundleInfo.CFBundleIconName);
+  pushValue(bundleInfo.CFBundleIconFiles);
+
+  const primaryIcon = bundleInfo.CFBundleIcons;
+  if (primaryIcon && typeof primaryIcon === 'object' && 'CFBundlePrimaryIcon' in primaryIcon) {
+    const primary = (primaryIcon as Record<string, unknown>).CFBundlePrimaryIcon;
+    if (primary && typeof primary === 'object') {
+      pushValue((primary as Record<string, unknown>).CFBundleIconFiles);
+      pushValue((primary as Record<string, unknown>).CFBundleIconName);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function resolveIcnsPath(appPath: string): string | null {
+  const resourcesDir = path.join(appPath, 'Contents', 'Resources');
+  if (!fs.existsSync(resourcesDir)) return null;
+
+  const bundleInfo = readBundleInfo(appPath);
+  const names = bundleInfo ? candidateIconNames(bundleInfo) : [];
+
+  for (const name of names) {
+    const fileName = name.endsWith('.icns') ? name : `${name}.icns`;
+    const iconPath = path.join(resourcesDir, fileName);
+    if (fs.existsSync(iconPath)) return iconPath;
+  }
+
+  try {
+    const fallback = fs.readdirSync(resourcesDir).find(file => file.endsWith('.icns'));
+    return fallback ? path.join(resourcesDir, fallback) : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadAppBundleIcon(appPath: string): string | undefined {
+  try {
+    const icnsPath = resolveIcnsPath(appPath);
+    if (!icnsPath) return undefined;
+    const image = nativeImage.createFromPath(icnsPath);
+    if (image.isEmpty()) return undefined;
+    return image.toDataURL();
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveToolIcon(tool: Tool): Tool {
+  if (tool.type !== 'app' || !tool.path) return tool;
+  const icon = loadAppBundleIcon(tool.path);
+  return icon ? { ...tool, icon } : tool;
+}
+
+function ensureToolIcons(tools: Tool[]): Tool[] {
+  let changed = false;
+
+  const resolved = tools.map(tool => {
+    if (tool.type !== 'app' || tool.icon || !tool.path) return tool;
+    const nextTool = resolveToolIcon(tool);
+    if (nextTool.icon && nextTool.icon !== tool.icon) changed = true;
+    return nextTool;
+  });
+
+  if (changed) {
+    appData.tools = resolved;
+    saveData(appData);
+  }
+
+  return resolved;
+}
 
 function scanMacApps(): string[] {
   const homeDir = app.getPath('home');
@@ -60,6 +159,7 @@ async function getAppLibrary(): Promise<AppLibraryEntry[]> {
     id: appPath,
     name: path.basename(appPath, '.app'),
     path: appPath,
+    icon: loadAppBundleIcon(appPath),
   }));
 }
 
@@ -173,21 +273,25 @@ function createTray(): void {
 
 // IPC handlers
 function setupIPC(): void {
-  ipcMain.handle('get-data', async () => appData);
+  ipcMain.handle('get-data', async () => ({
+    ...appData,
+    tools: ensureToolIcons(appData.tools),
+  }));
   ipcMain.handle('get-app-library', async () => getAppLibrary());
 
   ipcMain.handle('save-tool', async (_event, tool: Tool) => {
+    const resolvedTool = resolveToolIcon(tool);
     if (!tool.id) {
-      tool.id = createId();
-      tool.createdAt = Date.now();
-      tool.useCount = 0;
-      appData.tools.push(tool);
+      resolvedTool.id = createId();
+      resolvedTool.createdAt = Date.now();
+      resolvedTool.useCount = 0;
+      appData.tools.push(resolvedTool);
     } else {
-      const idx = appData.tools.findIndex(t => t.id === tool.id);
+      const idx = appData.tools.findIndex(t => t.id === resolvedTool.id);
       if (idx >= 0) {
-        appData.tools[idx] = tool;
+        appData.tools[idx] = resolvedTool;
       } else {
-        appData.tools.push(tool);
+        appData.tools.push(resolvedTool);
       }
     }
     saveData(appData);
