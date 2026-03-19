@@ -48,7 +48,7 @@ function backupCorruptedDataFile(dataPath: string): void {
   fs.copyFileSync(dataPath, backupPath);
 }
 
-function sanitizeSettings(settings: Partial<AppSettings> | undefined): AppSettings {
+export function sanitizeSettings(settings: Partial<AppSettings> | undefined): AppSettings {
   const nextSettings: AppSettings = {
     ...defaultSettings,
     ...(settings ?? {}),
@@ -102,7 +102,7 @@ function sanitizeSettings(settings: Partial<AppSettings> | undefined): AppSettin
   return nextSettings;
 }
 
-function sanitizeCategories(categories: Partial<Category>[] | undefined): Category[] {
+export function sanitizeCategories(categories: Partial<Category>[] | undefined): Category[] {
   const discovered = new Map<string, Category>();
 
   for (const category of defaultCategories) {
@@ -134,7 +134,7 @@ function sanitizeCategories(categories: Partial<Category>[] | undefined): Catego
     .map((category, index) => ({ ...category, order: index }));
 }
 
-function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Category[]): Tool[] {
+export function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Category[]): Tool[] {
   if (!Array.isArray(tools)) return [];
 
   const categoryIds = new Set(categories.map(category => category.id));
@@ -175,7 +175,7 @@ function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Category[
     });
 }
 
-function sanitizeData(data: Partial<AppData>): AppData {
+export function sanitizeData(data: Partial<AppData>): AppData {
   const categories = sanitizeCategories(data.categories);
   return {
     categories,
