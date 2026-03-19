@@ -25,6 +25,7 @@ export default function MainContent() {
     saveTool,
     showToast,
     expandImportItems,
+    selectDirectory,
   } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
@@ -200,6 +201,11 @@ export default function MainContent() {
       onClick: () => setShowAppLibrary(true),
     },
     {
+      label: '导入目录',
+      icon: '📂',
+      onClick: () => { void importDirectory(); },
+    },
+    {
       label: '添加网址',
       icon: '🌐',
       onClick: () => setNewToolPreset({
@@ -290,6 +296,12 @@ export default function MainContent() {
     if (imported > 0) {
       showToast('success', `已导入 ${imported} 个条目`);
     }
+  };
+
+  const importDirectory = async () => {
+    const directory = await selectDirectory();
+    if (!directory) return;
+    await importDroppedFiles([directory]);
   };
 
   return (
