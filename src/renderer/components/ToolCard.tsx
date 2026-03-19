@@ -59,10 +59,11 @@ export default function ToolCard({
   const [hover, setHover] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [iconFailed, setIconFailed] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const accentColor = tool.color || TYPE_COLORS[tool.type] || '#4f8ef7';
-  const hasCustomIcon = Boolean(tool.icon);
+  const hasCustomIcon = Boolean(tool.icon) && !iconFailed;
 
   const dims = {
     small: { width: 140, height: 110, iconSize: 28, nameFontSize: 12 },
@@ -203,6 +204,7 @@ export default function ToolCard({
             <img
               src={tool.icon}
               alt={tool.name}
+              onError={() => setIconFailed(true)}
               style={{
                 width: dims.iconSize + 6,
                 height: dims.iconSize + 6,

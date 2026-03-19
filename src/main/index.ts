@@ -208,9 +208,9 @@ function ensureToolIcons(tools: Tool[]): Tool[] {
   let changed = false;
 
   const resolved = tools.map(tool => {
-    if (tool.type !== 'app' || tool.icon || !tool.path) return tool;
+    if (tool.type !== 'app' || !tool.path) return tool;
     const nextTool = resolveToolIcon(tool);
-    if (nextTool.icon && nextTool.icon !== tool.icon) changed = true;
+    if (nextTool.icon !== tool.icon) changed = true;
     return nextTool;
   });
 
