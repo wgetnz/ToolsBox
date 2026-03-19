@@ -69,6 +69,7 @@ export default function MainContent() {
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [toolbarMenu, setToolbarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   const [lastSelectedToolId, setLastSelectedToolId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -82,6 +83,42 @@ export default function MainContent() {
       setSortKey(key);
       setSortAsc(key === 'name');
     }
+  };
+
+  const openDisplayMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setToolbarMenu({
+      x: rect.left,
+      y: rect.bottom + 6,
+      items: ([
+        ['small', '小'],
+        ['medium', '中'],
+        ['large', '大'],
+      ] as const).map(([size, label]) => ({
+        label: label + (cardSize === size ? ' ✓' : ''),
+        onClick: () => {
+          if (!data) return;
+          void saveSettings({ ...data.settings, cardSize: size });
+        },
+      })),
+    });
+  };
+
+  const openSortMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setToolbarMenu({
+      x: rect.left,
+      y: rect.bottom + 6,
+      items: ([
+        ['name', '名称'],
+        ['lastUsed', '最近使用'],
+        ['useCount', '使用次数'],
+        ['createdAt', '添加时间'],
+      ] as [SortKey, string][]).map(([key, label]) => ({
+        label: `${label}${sortKey === key ? sortAsc ? ' ↑' : ' ↓' : ''}`,
+        onClick: () => handleSort(key),
+      })),
+    });
   };
 
   const filtered = useMemo(() => {
@@ -440,61 +477,45 @@ export default function MainContent() {
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>显</span>
-          {(['small', 'medium', 'large'] as const).map(size => (
-            <button
-              key={size}
-              onClick={() => {
-                void saveSettings({ ...data.settings, cardSize: size });
-              }}
-              style={{
-                minWidth: 28,
-                padding: '3px 6px',
-                borderRadius: 6,
-                border: '1px solid var(--border-color)',
-                background: cardSize === size ? 'var(--accent-color)' : 'var(--bg-input)',
-                color: cardSize === size ? '#fff' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 500,
-              }}
-            >
-              {size === 'small' ? '小' : size === 'medium' ? '中' : '大'}
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={openDisplayMenu}
+          title={`显示: ${cardSize === 'small' ? '小' : cardSize === 'medium' ? '中' : '大'}`}
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            border: '1px solid var(--border-color)',
+            background: 'var(--bg-input)',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontSize: 15,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          👁
+        </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>排</span>
-          {([
-            ['name', '名称'],
-            ['lastUsed', '最近'],
-            ['useCount', '次数'],
-            ['createdAt', '添加'],
-          ] as [SortKey, string][]).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => handleSort(key)}
-              style={{
-                padding: '3px 7px',
-                borderRadius: 6,
-                border: '1px solid var(--border-color)',
-                background: sortKey === key ? 'var(--accent-color)' : 'var(--bg-input)',
-                color: sortKey === key ? '#fff' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 3,
-              }}
-            >
-              {label}
-              {sortKey === key && <span>{sortAsc ? '↑' : '↓'}</span>}
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={openSortMenu}
+          title={`排序: ${sortKey === 'name' ? '名称' : sortKey === 'lastUsed' ? '最近使用' : sortKey === 'useCount' ? '使用次数' : '添加时间'}`}
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            border: '1px solid var(--border-color)',
+            background: 'var(--bg-input)',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontSize: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          ↕
+        </button>
       </div>
 
       {selectedToolIds.length > 0 && (
@@ -670,6 +691,15 @@ export default function MainContent() {
           y={contextMenu.y}
           items={contextMenu.items}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {toolbarMenu && (
+        <ContextMenu
+          x={toolbarMenu.x}
+          y={toolbarMenu.y}
+          items={toolbarMenu.items}
+          onClose={() => setToolbarMenu(null)}
         />
       )}
     </div>
