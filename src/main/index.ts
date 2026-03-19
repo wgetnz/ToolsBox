@@ -6,7 +6,6 @@ import {
   Tray,
   Menu,
   nativeImage,
-  globalShortcut,
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -17,7 +16,6 @@ import { launchTool, openInTerminal, showInFinder } from './launcher';
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
-const QUICK_LAUNCHER_SHORTCUT = 'CommandOrControl+Shift+Space';
 
 async function resolveToolIcon(tool: Tool): Promise<Tool> {
   if (tool.type !== 'app' || !tool.path) return tool;
@@ -180,13 +178,6 @@ function openQuickLauncher(): void {
   mainWindow?.webContents.send('open-quick-launcher');
 }
 
-function registerGlobalShortcuts(): void {
-  globalShortcut.unregisterAll();
-  globalShortcut.register(QUICK_LAUNCHER_SHORTCUT, () => {
-    openQuickLauncher();
-  });
-}
-
 function createTray(): void {
   // Try to load icon from assets
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray-icon.png');
@@ -205,7 +196,7 @@ function createTray(): void {
       },
     },
     {
-      label: `打开快速启动器 (${QUICK_LAUNCHER_SHORTCUT})`,
+      label: '打开快速启动器',
       click: () => {
         openQuickLauncher();
       },
@@ -392,7 +383,6 @@ app.whenReady().then(() => {
   setupIPC();
   createWindow();
   createTray();
-  registerGlobalShortcuts();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -410,6 +400,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  globalShortcut.unregisterAll();
   saveWindowBounds();
 });
