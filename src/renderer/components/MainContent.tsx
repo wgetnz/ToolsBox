@@ -86,6 +86,8 @@ export default function MainContent() {
   };
 
   const openDisplayMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setToolbarMenu({
       x: rect.left,
@@ -105,6 +107,8 @@ export default function MainContent() {
   };
 
   const openSortMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setToolbarMenu({
       x: rect.left,
