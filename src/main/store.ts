@@ -21,6 +21,8 @@ const defaultSettings: AppSettings = {
   cardSize: 'medium',
   javaEnvs: [],
   pythonEnvs: [],
+  hoverSwitchCategories: true,
+  showRecentTools: true,
   startAtLogin: false,
   minimizeToTray: true,
 };

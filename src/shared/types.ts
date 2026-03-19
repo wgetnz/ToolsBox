@@ -41,6 +41,8 @@ export interface AppSettings {
   fontSize: 'small' | 'medium' | 'large';
   cardSize: 'small' | 'medium' | 'large';
   backgroundColor?: string;
+  hoverSwitchCategories: boolean;
+  showRecentTools: boolean;
   javaEnvs: JavaEnv[];
   pythonEnvs: PythonEnv[];
   startAtLogin: boolean;

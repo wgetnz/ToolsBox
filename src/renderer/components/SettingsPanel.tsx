@@ -15,6 +15,8 @@ export default function SettingsPanel({ onClose }: Props) {
       cardSize: 'medium',
       javaEnvs: [],
       pythonEnvs: [],
+      hoverSwitchCategories: true,
+      showRecentTools: true,
       startAtLogin: false,
       minimizeToTray: true,
     }
@@ -172,6 +174,20 @@ export default function SettingsPanel({ onClose }: Props) {
                     ))}
                   </div>
                 </div>
+
+                <ToggleItem
+                  label="分类悬停切换"
+                  description="鼠标移到分类时自动切换当前分类"
+                  checked={form.hoverSwitchCategories}
+                  onChange={v => update('hoverSwitchCategories', v)}
+                />
+
+                <ToggleItem
+                  label="显示最近使用"
+                  description="在侧边栏展示最近使用过的工具列表"
+                  checked={form.showRecentTools}
+                  onChange={v => update('showRecentTools', v)}
+                />
 
                 <div className="form-group">
                   <label className="form-label">自定义背景色</label>

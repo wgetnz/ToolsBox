@@ -3,8 +3,8 @@ import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 
 type LauncherItem =
-  | { id: string; kind: 'action'; title: string; subtitle: string; icon: string; run: () => void }
-  | { id: string; kind: 'tool'; title: string; subtitle: string; icon: string; tool: Tool };
+  | { id: string; kind: 'action'; title: string; subtitle: string; icon: string; run: () => void; score: number }
+  | { id: string; kind: 'tool'; title: string; subtitle: string; icon: string; image?: string; tool: Tool; score: number };
 
 interface Props {
   onClose: () => void;
@@ -33,6 +33,37 @@ export default function QuickLauncherModal({
   const [query, setQuery] = React.useState('');
   const [activeIndex, setActiveIndex] = React.useState(0);
 
+  const normalize = (value: string) => value.trim().toLowerCase();
+
+  const scoreText = React.useCallback((queryText: string, ...fields: string[]) => {
+    if (!queryText) return 1;
+
+    const tokens = queryText.split(/\s+/).filter(Boolean);
+    const haystacks = fields.map(field => normalize(field));
+    let score = 0;
+
+    for (const token of tokens) {
+      let tokenScore = 0;
+
+      for (const haystack of haystacks) {
+        if (!haystack) continue;
+        if (haystack === token) tokenScore = Math.max(tokenScore, 120);
+        else if (haystack.startsWith(token)) tokenScore = Math.max(tokenScore, 90);
+        else if (haystack.includes(token)) tokenScore = Math.max(tokenScore, 60);
+        else {
+          const compact = haystack.replace(/[\s\-_/]+/g, '');
+          const compactToken = token.replace(/[\s\-_/]+/g, '');
+          if (compact.includes(compactToken)) tokenScore = Math.max(tokenScore, 35);
+        }
+      }
+
+      if (tokenScore === 0) return 0;
+      score += tokenScore;
+    }
+
+    return score;
+  }, []);
+
   const actionItems = React.useMemo<LauncherItem[]>(() => [
     {
       id: 'action-add-tool',
@@ -40,6 +71,7 @@ export default function QuickLauncherModal({
       title: '添加工具',
       subtitle: '新建一个本地工具、脚本或网址',
       icon: '+',
+      score: 0,
       run: onAddTool,
     },
     {
@@ -48,6 +80,7 @@ export default function QuickLauncherModal({
       title: '打开应用库',
       subtitle: '从本机应用列表快速加入 LaunchBox',
       icon: '📚',
+      score: 0,
       run: onOpenAppLibrary,
     },
     {
@@ -56,6 +89,7 @@ export default function QuickLauncherModal({
       title: '打开设置',
       subtitle: '调整外观、环境和系统行为',
       icon: '⚙️',
+      score: 0,
       run: onOpenSettings,
     },
   ], [onAddTool, onOpenAppLibrary, onOpenSettings]);
@@ -63,42 +97,45 @@ export default function QuickLauncherModal({
   const toolItems = React.useMemo<LauncherItem[]>(() => {
     if (!data) return [];
 
-    const sorted = [...data.tools].sort((a, b) => {
-      const queryText = query.trim().toLowerCase();
-      const aMatches = queryText && a.name.toLowerCase().includes(queryText) ? 1 : 0;
-      const bMatches = queryText && b.name.toLowerCase().includes(queryText) ? 1 : 0;
+    const queryText = normalize(query);
 
-      if (aMatches !== bMatches) return bMatches - aMatches;
-      if ((a.lastUsed ?? 0) !== (b.lastUsed ?? 0)) return (b.lastUsed ?? 0) - (a.lastUsed ?? 0);
-      return a.name.localeCompare(b.name, 'zh-CN');
-    });
+    return data.tools.map(tool => {
+      const matchScore = scoreText(queryText, tool.name, tool.description, tool.path);
+      const recentBoost = tool.lastUsed ? Math.min(tool.useCount * 4 + 20, 80) : Math.min(tool.useCount * 4, 40);
+      const totalScore = matchScore + recentBoost;
 
-    return sorted.map(tool => ({
+      return {
       id: tool.id,
       kind: 'tool',
       title: tool.name,
       subtitle: tool.description || tool.path,
       icon: TOOL_TYPE_ICONS[tool.type] ?? '🔧',
+      image: tool.icon,
+      score: totalScore,
       tool,
-    }));
-  }, [data, query]);
+      };
+    });
+  }, [data, query, scoreText]);
 
   const visibleItems = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const actions = !q
-      ? actionItems
-      : actionItems.filter(item =>
-          item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)
-        );
+    const q = normalize(query);
+    const actions = actionItems
+      .map(item => ({
+        ...item,
+        score: q ? scoreText(q, item.title, item.subtitle) + 10 : 50,
+      }))
+      .filter(item => item.score > 0);
 
-    const tools = toolItems.filter(item =>
-      !q ||
-      item.title.toLowerCase().includes(q) ||
-      item.subtitle.toLowerCase().includes(q)
-    );
+    const tools = toolItems.filter(item => item.score > 0);
 
-    return [...actions, ...tools].slice(0, 12);
-  }, [actionItems, toolItems, query]);
+    return [...actions, ...tools]
+      .sort((a, b) => {
+        if (a.score !== b.score) return b.score - a.score;
+        if (a.kind !== b.kind) return a.kind === 'tool' ? -1 : 1;
+        return a.title.localeCompare(b.title, 'zh-CN');
+      })
+      .slice(0, 12);
+  }, [actionItems, query, scoreText, toolItems]);
 
   React.useEffect(() => {
     setActiveIndex(0);
@@ -176,7 +213,17 @@ export default function QuickLauncherModal({
                   onClose();
                 }}
               >
-                <span className="quick-launcher-icon">{item.icon}</span>
+                <span className="quick-launcher-icon">
+                  {item.kind === 'tool' && item.image ? (
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      style={{ width: 24, height: 24, objectFit: 'contain', borderRadius: 6 }}
+                    />
+                  ) : (
+                    item.icon
+                  )}
+                </span>
                 <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
                   <span className="quick-launcher-title">{item.title}</span>
                   <span className="quick-launcher-subtitle">{item.subtitle}</span>

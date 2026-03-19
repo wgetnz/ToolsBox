@@ -51,6 +51,7 @@ export default function Sidebar() {
   };
 
   const scheduleHoverSelect = (categoryId: string) => {
+    if (!data.settings.hoverSwitchCategories) return;
     if (contextMenu) return;
     if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = window.setTimeout(() => {
@@ -184,7 +185,7 @@ export default function Sidebar() {
         </button>
 
         {/* Recent */}
-        {recentTools.length > 0 && (
+        {data.settings.showRecentTools && recentTools.length > 0 && (
           <>
             <div style={{
               fontSize: 11,
