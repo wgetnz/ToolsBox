@@ -10,6 +10,7 @@ test('sanitizeSettings restores invalid enum values and booleans', () => {
     cardSize: 'tiny',
     hoverSwitchCategories: 'yes',
     showRecentTools: undefined,
+    enableGlobalQuickLauncher: 'enabled',
     startAtLogin: 'sometimes',
     minimizeToTray: null,
   });
@@ -19,6 +20,7 @@ test('sanitizeSettings restores invalid enum values and booleans', () => {
   assert.equal(settings.cardSize, 'medium');
   assert.equal(settings.hoverSwitchCategories, true);
   assert.equal(settings.showRecentTools, true);
+  assert.equal(settings.enableGlobalQuickLauncher, true);
   assert.equal(settings.startAtLogin, false);
   assert.equal(settings.minimizeToTray, true);
 });
@@ -61,6 +63,7 @@ test('sanitizeData returns a complete normalized app data object', () => {
 
   assert.equal(data.settings.theme, 'light');
   assert.equal(data.settings.hoverSwitchCategories, true);
+  assert.equal(data.settings.enableGlobalQuickLauncher, true);
   assert.ok(data.categories.some(category => category.id === 'ops'));
   assert.equal(data.tools[0].categoryId, 'ops');
   assert.equal(data.tools[0].useCount, 0);

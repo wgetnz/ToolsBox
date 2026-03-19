@@ -17,6 +17,7 @@ export default function SettingsPanel({ onClose }: Props) {
       pythonEnvs: [],
       hoverSwitchCategories: true,
       showRecentTools: true,
+      enableGlobalQuickLauncher: true,
       startAtLogin: false,
       minimizeToTray: true,
     }
@@ -270,6 +271,12 @@ export default function SettingsPanel({ onClose }: Props) {
                   description="登录时自动启动 LaunchBox"
                   checked={form.startAtLogin}
                   onChange={v => update('startAtLogin', v)}
+                />
+                <ToggleItem
+                  label="全局唤起面板"
+                  description="使用 Cmd/Ctrl + Shift + K 在任意位置呼出快速启动器"
+                  checked={form.enableGlobalQuickLauncher}
+                  onChange={v => update('enableGlobalQuickLauncher', v)}
                 />
                 <ToggleItem
                   label="最小化到托盘"

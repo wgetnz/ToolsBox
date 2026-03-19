@@ -6,6 +6,7 @@ import {
   Tray,
   Menu,
   nativeImage,
+  globalShortcut,
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -14,10 +15,12 @@ import { AppData, Tool, Category, AppSettings, AppLibraryEntry } from '../shared
 import { loadData, saveData, createId } from './store';
 import { launchTool, openInTerminal, showInFinder } from './launcher';
 import { expandImportItems } from './imports';
+import { createToolShortcut } from './shortcuts';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let appData: AppData;
+const GLOBAL_QUICK_LAUNCHER_ACCELERATOR = 'CommandOrControl+Shift+K';
 
 function resolveAppBundlePath(appPath: string): string {
   const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
@@ -341,6 +344,20 @@ function openQuickLauncher(): void {
   mainWindow?.webContents.send('open-quick-launcher');
 }
 
+function syncGlobalQuickLauncherShortcut(): void {
+  globalShortcut.unregister(GLOBAL_QUICK_LAUNCHER_ACCELERATOR);
+
+  if (!appData.settings.enableGlobalQuickLauncher) return;
+
+  const registered = globalShortcut.register(GLOBAL_QUICK_LAUNCHER_ACCELERATOR, () => {
+    openQuickLauncher();
+  });
+
+  if (!registered) {
+    console.warn(`Failed to register global shortcut: ${GLOBAL_QUICK_LAUNCHER_ACCELERATOR}`);
+  }
+}
+
 function createTray(): void {
   // Try to load icon from assets
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray-icon.png');
@@ -360,6 +377,7 @@ function createTray(): void {
     },
     {
       label: '打开快速启动器',
+      accelerator: 'CmdOrCtrl+Shift+K',
       click: () => {
         openQuickLauncher();
       },
@@ -479,6 +497,8 @@ function setupIPC(): void {
       });
     }
 
+    syncGlobalQuickLauncherShortcut();
+
     return appData.settings;
   });
 
@@ -525,6 +545,21 @@ function setupIPC(): void {
     showInFinder(filePath);
   });
 
+  ipcMain.handle('create-tool-shortcut', (_event, toolId: string) => {
+    const tool = appData.tools.find(item => item.id === toolId);
+    if (!tool) {
+      return { success: false, error: 'Tool not found' };
+    }
+
+    try {
+      const shortcutPath = createToolShortcut(tool, appData.settings, app.getPath('desktop'));
+      showInFinder(shortcutPath);
+      return { success: true, path: shortcutPath };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   ipcMain.handle('window-state', (_event, action: string) => {
     if (!mainWindow) return;
     switch (action) {
@@ -549,6 +584,7 @@ app.whenReady().then(() => {
   setupIPC();
   createWindow();
   createTray();
+  syncGlobalQuickLauncherShortcut();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -566,5 +602,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll();
   saveWindowBounds();
 });

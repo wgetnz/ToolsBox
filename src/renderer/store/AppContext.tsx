@@ -20,6 +20,7 @@ declare global {
       expandImportItems: (items: string[]) => Promise<string[]>;
       openInTerminal: (dirPath: string) => Promise<void>;
       showInFinder: (filePath: string) => Promise<void>;
+      createToolShortcut: (toolId: string) => Promise<{ success: boolean; path?: string; error?: string }>;
       windowControl: (action: 'minimize' | 'maximize' | 'close') => Promise<void>;
       onOpenQuickLauncher: (callback: () => void) => () => void;
     };
@@ -92,6 +93,7 @@ interface AppContextValue extends AppState {
   expandImportItems: (items: string[]) => Promise<string[]>;
   openInTerminal: (dirPath: string) => Promise<void>;
   showInFinder: (filePath: string) => Promise<void>;
+  createToolShortcut: (toolId: string) => Promise<void>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   selectCategory: (id: string) => void;
   setSearch: (q: string) => void;
@@ -200,6 +202,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const expandImportItems = useCallback((items: string[]) => window.launchbox.expandImportItems(items), []);
   const openInTerminal = useCallback((p: string) => window.launchbox.openInTerminal(p), []);
   const showInFinder = useCallback((p: string) => window.launchbox.showInFinder(p), []);
+  const createToolShortcut = useCallback(async (toolId: string) => {
+    const result = await window.launchbox.createToolShortcut(toolId);
+    if (result.success) {
+      const tool = state.data?.tools.find(item => item.id === toolId);
+      showToast('success', `已为 ${tool?.name ?? '工具'} 创建桌面快捷方式`);
+      return;
+    }
+    showToast('error', `创建快捷方式失败: ${result.error}`);
+  }, [showToast, state.data]);
 
   const windowControl = useCallback((action: 'minimize' | 'maximize' | 'close') => {
     window.launchbox.windowControl(action);
@@ -231,6 +242,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       expandImportItems,
       openInTerminal,
       showInFinder,
+      createToolShortcut,
       windowControl,
       selectCategory,
       setSearch,

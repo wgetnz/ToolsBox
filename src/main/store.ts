@@ -23,6 +23,7 @@ const defaultSettings: AppSettings = {
   pythonEnvs: [],
   hoverSwitchCategories: true,
   showRecentTools: true,
+  enableGlobalQuickLauncher: true,
   startAtLogin: false,
   minimizeToTray: true,
 };
@@ -65,6 +66,9 @@ export function sanitizeSettings(settings: Partial<AppSettings> | undefined): Ap
   nextSettings.showRecentTools = typeof nextSettings.showRecentTools === 'boolean'
     ? nextSettings.showRecentTools
     : defaultSettings.showRecentTools;
+  nextSettings.enableGlobalQuickLauncher = typeof nextSettings.enableGlobalQuickLauncher === 'boolean'
+    ? nextSettings.enableGlobalQuickLauncher
+    : defaultSettings.enableGlobalQuickLauncher;
   nextSettings.startAtLogin = typeof nextSettings.startAtLogin === 'boolean'
     ? nextSettings.startAtLogin
     : defaultSettings.startAtLogin;

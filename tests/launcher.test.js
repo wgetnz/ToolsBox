@@ -10,6 +10,7 @@ const defaultSettings = {
   backgroundColor: undefined,
   hoverSwitchCategories: true,
   showRecentTools: true,
+  enableGlobalQuickLauncher: true,
   javaEnvs: [],
   pythonEnvs: [],
   startAtLogin: false,

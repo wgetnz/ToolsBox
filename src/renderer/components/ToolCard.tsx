@@ -55,7 +55,7 @@ export default function ToolCard({
   onSelect,
   onRequestContextMenu,
 }: Props) {
-  const { launchTool, deleteTool, openInTerminal, showInFinder } = useApp();
+  const { launchTool, deleteTool, openInTerminal, showInFinder, createToolShortcut } = useApp();
   const [hover, setHover] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -100,7 +100,8 @@ export default function ToolCard({
   }
 
   menuItems.push(
-    { divider: true, label: 'divider' },
+    { label: '创建桌面快捷方式', icon: '🔗', onClick: () => createToolShortcut(tool.id) },
+    { divider: true, label: 'divider-shortcut' },
     { label: '删除', icon: '🗑️', danger: true, onClick: () => deleteTool(tool.id) }
   );
 

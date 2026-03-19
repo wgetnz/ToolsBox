@@ -20,6 +20,7 @@ const api = {
   expandImportItems: (items: string[]) => ipcRenderer.invoke('expand-import-items', items),
   openInTerminal: (dirPath: string) => ipcRenderer.invoke('open-in-terminal', dirPath),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
+  createToolShortcut: (toolId: string) => ipcRenderer.invoke('create-tool-shortcut', toolId),
   windowControl: (action: 'minimize' | 'maximize' | 'close') =>
     ipcRenderer.invoke('window-state', action),
   onOpenQuickLauncher: (callback: () => void) => {

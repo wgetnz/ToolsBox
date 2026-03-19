@@ -43,6 +43,7 @@ export interface AppSettings {
   backgroundColor?: string;
   hoverSwitchCategories: boolean;
   showRecentTools: boolean;
+  enableGlobalQuickLauncher: boolean;
   javaEnvs: JavaEnv[];
   pythonEnvs: PythonEnv[];
   startAtLogin: boolean;
@@ -82,6 +83,7 @@ export type IpcChannel =
   | 'expand-import-items'
   | 'open-in-terminal'
   | 'show-in-finder'
+  | 'create-tool-shortcut'
   | 'minimize-window'
   | 'maximize-window'
   | 'close-window'
