@@ -752,6 +752,7 @@ export default function MainContent() {
                 tool={tool}
                 size={cardSize}
                 customSortEnabled={canCustomSort}
+                customSortDragging={Boolean(draggingToolId)}
                 customSortActive={draggingToolId === tool.id}
                 onCustomSortStart={() => handleCustomSortStart(tool.id)}
                 onCustomSortHover={() => handleCustomSortHover(tool.id)}

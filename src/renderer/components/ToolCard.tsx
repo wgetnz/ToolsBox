@@ -37,6 +37,7 @@ interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
   customSortEnabled?: boolean;
+  customSortDragging?: boolean;
   customSortActive?: boolean;
   onCustomSortStart?: () => void;
   onCustomSortHover?: () => void;
@@ -50,6 +51,7 @@ export default function ToolCard({
   tool,
   size,
   customSortEnabled = false,
+  customSortDragging = false,
   customSortActive = false,
   onCustomSortStart,
   onCustomSortHover,
@@ -134,10 +136,14 @@ export default function ToolCard({
           transform: hover && !isCompact ? 'translateY(-2px)' : 'none',
           overflow: 'hidden',
         }}
-        onMouseEnter={() => setHover(true)}
+        onMouseEnter={() => {
+          setHover(true);
+          if (!customSortEnabled || !customSortDragging) return;
+          onCustomSortHover?.();
+        }}
         onMouseLeave={() => setHover(false)}
         onMouseMove={() => {
-          if (!customSortEnabled || !customSortActive) return;
+          if (!customSortEnabled || !customSortDragging) return;
           onCustomSortHover?.();
         }}
         onClick={event => onSelect?.(event, tool)}
