@@ -71,6 +71,7 @@ export default function MainContent() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   const [lastSelectedToolId, setLastSelectedToolId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [moveTargetCategoryId, setMoveTargetCategoryId] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
 
@@ -146,6 +147,12 @@ export default function MainContent() {
   const handleSelectTool = (event: React.MouseEvent, tool: Tool) => {
     const isMeta = event.metaKey || event.ctrlKey;
     const isShift = event.shiftKey;
+    const shouldSelect = selectionMode || isMeta || isShift;
+
+    if (!shouldSelect) {
+      void launchTool(tool.id);
+      return;
+    }
 
     if (isShift && lastSelectedToolId) {
       const startIndex = filteredToolIds.indexOf(lastSelectedToolId);
@@ -192,6 +199,14 @@ export default function MainContent() {
 
   const handleRecolorSelected = async (color: string) => {
     await updateToolsColor(selectedToolIds, color);
+  };
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(current => {
+      const next = !current;
+      if (!next) clearSelection();
+      return next;
+    });
   };
 
   const buildBatchContextMenuItems = (): ContextMenuItem[] => {
@@ -408,6 +423,24 @@ export default function MainContent() {
         <div style={{ flex: 1 }} />
 
         {/* Sort */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+          <button
+            onClick={toggleSelectionMode}
+            style={{
+              padding: '3px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--border-color)',
+              background: selectionMode ? 'var(--accent-color)' : 'var(--bg-input)',
+              color: selectionMode ? '#fff' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            {selectionMode ? '选择中' : '多选'}
+          </button>
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
           <span>显示:</span>
           {(['small', 'medium', 'large'] as const).map(size => (

@@ -52,7 +52,6 @@ export default function ToolCard({
 }: Props) {
   const { launchTool, deleteTool, openInTerminal, showInFinder, createToolShortcut } = useApp();
   const [hover, setHover] = useState(false);
-  const [launching, setLaunching] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [iconFailed, setIconFailed] = useState(false);
 
@@ -66,14 +65,6 @@ export default function ToolCard({
     large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
   }[size];
   const iconSize = dims.iconSize;
-
-  const handleLaunch = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (launching) return;
-    setLaunching(true);
-    await launchTool(tool.id);
-    setLaunching(false);
-  };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     const handled = onRequestContextMenu?.(e, tool);
@@ -131,7 +122,6 @@ export default function ToolCard({
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         onClick={event => onSelect?.(event, tool)}
-        onDoubleClick={handleLaunch}
         onContextMenu={handleContextMenu}
       >
         {/* Top accent strip */}
@@ -245,32 +235,6 @@ export default function ToolCard({
           }}>
             {tool.description}
           </div>
-        )}
-
-        {/* Launch button overlay on hover */}
-        {hover && !isCompact && (
-          <button
-            style={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              width: 28,
-              height: 28,
-              background: accentColor,
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              transition: 'all 0.1s',
-            }}
-            onClick={handleLaunch}
-            title="启动"
-          >
-            {launching ? '⏳' : '▶'}
-          </button>
         )}
 
         {/* Use count */}
