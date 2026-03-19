@@ -14,7 +14,18 @@ const BATCH_COLORS = [
 ];
 
 export default function MainContent() {
-  const { data, selectedCategoryId, searchQuery, launchTool, deleteTools, moveToolsToCategory, updateToolsColor, saveTool, showToast } = useApp();
+  const {
+    data,
+    selectedCategoryId,
+    searchQuery,
+    launchTool,
+    deleteTools,
+    moveToolsToCategory,
+    updateToolsColor,
+    saveTool,
+    showToast,
+    expandImportItems,
+  } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [newToolPreset, setNewToolPreset] = useState<Partial<Tool> | null>(null);
   const [showAppLibrary, setShowAppLibrary] = useState(false);
@@ -239,8 +250,13 @@ export default function MainContent() {
     const categoryId = selectedCategoryId === 'all' ? 'misc' : selectedCategoryId;
     const existingKeys = new Set(data.tools.map(tool => `${tool.type}:${tool.path}`));
     let skipped = 0;
+    let imported = 0;
+    const localPaths = items.filter(item => !/^https?:\/\//i.test(item));
+    const expandedPaths = localPaths.length > 0 ? await expandImportItems(localPaths) : [];
+    const expandedUrls = items.filter(item => /^https?:\/\//i.test(item));
+    const resolvedItems = Array.from(new Set([...expandedPaths, ...expandedUrls]));
 
-    for (const item of items) {
+    for (const item of resolvedItems) {
       const type = item.startsWith('http://') || item.startsWith('https://')
         ? 'url'
         : inferToolType(item);
@@ -264,10 +280,15 @@ export default function MainContent() {
         createdAt: Date.now(),
       });
       existingKeys.add(key);
+      imported += 1;
     }
 
     if (skipped > 0) {
       showToast('info', `已跳过 ${skipped} 个重复条目`);
+    }
+
+    if (imported > 0) {
+      showToast('success', `已导入 ${imported} 个条目`);
     }
   };
 
@@ -511,7 +532,7 @@ export default function MainContent() {
             <div style={{ fontSize: 42 }}>📥</div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>拖到这里即可导入</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              支持 App、脚本、可执行文件和网址
+              支持 App、目录、脚本、可执行文件和网址
             </div>
           </div>
         </div>

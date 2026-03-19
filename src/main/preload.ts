@@ -17,6 +17,7 @@ const api = {
   launchTool: (toolId: string) => ipcRenderer.invoke('launch-tool', toolId),
   selectFile: (filters?: Electron.FileFilter[]) => ipcRenderer.invoke('select-file', filters),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  expandImportItems: (items: string[]) => ipcRenderer.invoke('expand-import-items', items),
   openInTerminal: (dirPath: string) => ipcRenderer.invoke('open-in-terminal', dirPath),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   windowControl: (action: 'minimize' | 'maximize' | 'close') =>

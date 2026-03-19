@@ -79,6 +79,7 @@ export type IpcChannel =
   | 'get-settings'
   | 'select-file'
   | 'select-directory'
+  | 'expand-import-items'
   | 'open-in-terminal'
   | 'show-in-finder'
   | 'minimize-window'

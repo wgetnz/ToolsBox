@@ -17,6 +17,7 @@ declare global {
       launchTool: (toolId: string) => Promise<{ success: boolean; error?: string }>;
       selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;
+      expandImportItems: (items: string[]) => Promise<string[]>;
       openInTerminal: (dirPath: string) => Promise<void>;
       showInFinder: (filePath: string) => Promise<void>;
       windowControl: (action: 'minimize' | 'maximize' | 'close') => Promise<void>;
@@ -88,6 +89,7 @@ interface AppContextValue extends AppState {
   launchTool: (toolId: string) => Promise<void>;
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
   selectDirectory: () => Promise<string | null>;
+  expandImportItems: (items: string[]) => Promise<string[]>;
   openInTerminal: (dirPath: string) => Promise<void>;
   showInFinder: (filePath: string) => Promise<void>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
@@ -195,6 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const selectDirectory = useCallback(() => window.launchbox.selectDirectory(), []);
+  const expandImportItems = useCallback((items: string[]) => window.launchbox.expandImportItems(items), []);
   const openInTerminal = useCallback((p: string) => window.launchbox.openInTerminal(p), []);
   const showInFinder = useCallback((p: string) => window.launchbox.showInFinder(p), []);
 
@@ -225,6 +228,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       launchTool,
       selectFile,
       selectDirectory,
+      expandImportItems,
       openInTerminal,
       showInFinder,
       windowControl,
