@@ -115,33 +115,132 @@ function readPlistJson(plistPath: string): Record<string, unknown> | null {
   }
 }
 
-function resolveBundleIconPath(appPath: string): string | null {
-  const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
-  if (!fs.existsSync(infoPlistPath)) return null;
-
-  const plist = readPlistJson(infoPlistPath);
-  const resourcesDir = path.join(appPath, 'Contents', 'Resources');
-  if (!plist || !fs.existsSync(resourcesDir)) return null;
-
-  const iconName = typeof plist.CFBundleIconFile === 'string' && plist.CFBundleIconFile.trim()
-    ? plist.CFBundleIconFile.trim()
-    : typeof plist.CFBundleIconName === 'string' && plist.CFBundleIconName.trim()
-      ? plist.CFBundleIconName.trim()
-      : null;
-
+function resolveBundlePaths(appPath: string): Array<{ bundlePath: string; plistPath: string; resourcesDir: string }> {
   const candidates = [
-    iconName,
-    iconName ? `${iconName}.icns` : null,
-    'AppIcon.icns',
-  ].filter((item): item is string => Boolean(item));
+    {
+      bundlePath: appPath,
+      plistPath: path.join(appPath, 'Contents', 'Info.plist'),
+      resourcesDir: path.join(appPath, 'Contents', 'Resources'),
+    },
+    {
+      bundlePath: appPath,
+      plistPath: path.join(appPath, 'Info.plist'),
+      resourcesDir: appPath,
+    },
+    {
+      bundlePath: path.join(appPath, 'Wrapper', 'Runner.app'),
+      plistPath: path.join(appPath, 'Wrapper', 'Runner.app', 'Info.plist'),
+      resourcesDir: path.join(appPath, 'Wrapper', 'Runner.app'),
+    },
+  ];
 
-  for (const name of candidates) {
-    const iconPath = path.join(resourcesDir, name);
-    if (fs.existsSync(iconPath)) return iconPath;
+  return candidates.filter(candidate => fs.existsSync(candidate.plistPath));
+}
+
+function extractBundleIconNames(plist: Record<string, unknown>): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+
+  const pushName = (value: unknown) => {
+    if (typeof value !== 'string' || !value.trim()) return;
+    const trimmed = value.trim();
+    if (seen.has(trimmed)) return;
+    seen.add(trimmed);
+    names.push(trimmed);
+  };
+
+  const pushNames = (values: unknown) => {
+    if (!Array.isArray(values)) return;
+    for (const item of values) {
+      pushName(item);
+    }
+  };
+
+  const collectFromIconDictionary = (value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const iconDictionary = value as Record<string, unknown>;
+    pushNames(iconDictionary.CFBundleIconFiles);
+    pushName(iconDictionary.CFBundleIconName);
+  };
+
+  collectFromIconDictionary((plist.CFBundleIcons as Record<string, unknown> | undefined)?.CFBundlePrimaryIcon);
+  collectFromIconDictionary((plist['CFBundleIcons~ipad'] as Record<string, unknown> | undefined)?.CFBundlePrimaryIcon);
+  pushNames(plist.CFBundleIconFiles);
+  pushName(plist.CFBundleIconFile);
+  pushName(plist.CFBundleIconName);
+
+  return names;
+}
+
+function resolveIconCandidates(resourcesDir: string, iconName: string): string[] {
+  const normalizedName = iconName.replace(/\.(icns|png)$/i, '');
+  const exactCandidates = [
+    iconName,
+    `${iconName}.icns`,
+    `${iconName}.png`,
+    `${normalizedName}.icns`,
+    `${normalizedName}.png`,
+  ];
+
+  const discovered = new Set<string>();
+  for (const candidate of exactCandidates) {
+    const fullPath = path.join(resourcesDir, candidate);
+    if (fs.existsSync(fullPath)) {
+      discovered.add(fullPath);
+    }
   }
 
-  const icnsFiles = fs.readdirSync(resourcesDir).filter(name => name.endsWith('.icns')).sort();
-  return icnsFiles.length > 0 ? path.join(resourcesDir, icnsFiles[0]) : null;
+  const lowerIconName = normalizedName.toLowerCase();
+  const specificVariantPattern = new RegExp(`^${lowerIconName}(?:@\\dx|~ipad)?\\.(?:png|icns)$`, 'i');
+  const fuzzyMatches = fs.readdirSync(resourcesDir)
+    .filter(name => specificVariantPattern.test(name))
+    .sort((a, b) => b.localeCompare(a, 'zh-CN'));
+
+  for (const match of fuzzyMatches) {
+    discovered.add(path.join(resourcesDir, match));
+  }
+
+  return Array.from(discovered);
+}
+
+function pickPreferredIconFile(paths: string[]): string | null {
+  if (paths.length === 0) return null;
+
+  const scored = paths
+    .map(filePath => {
+      const fileName = path.basename(filePath).toLowerCase();
+      let score = 0;
+      if (fileName.endsWith('.icns')) score += 1000;
+      if (/@3x/.test(fileName)) score += 300;
+      else if (/@2x/.test(fileName)) score += 200;
+      if (/83_5|1024|512|256|180|167|152|120|76|60/.test(fileName)) score += 100;
+      if (/appicon/.test(fileName)) score += 50;
+      return { filePath, score };
+    })
+    .sort((a, b) => b.score - a.score || a.filePath.localeCompare(b.filePath, 'zh-CN'));
+
+  return scored[0]?.filePath ?? null;
+}
+
+function resolveBundleIconPath(appPath: string): string | null {
+  const bundleCandidates = resolveBundlePaths(appPath);
+
+  for (const bundle of bundleCandidates) {
+    const plist = readPlistJson(bundle.plistPath);
+    if (!plist || !fs.existsSync(bundle.resourcesDir)) continue;
+
+    const iconNames = extractBundleIconNames(plist);
+    const iconPaths = iconNames.flatMap(iconName => resolveIconCandidates(bundle.resourcesDir, iconName));
+    const preferred = pickPreferredIconFile(iconPaths);
+    if (preferred) return preferred;
+
+    const icnsFiles = fs.readdirSync(bundle.resourcesDir)
+      .filter(name => name.endsWith('.icns'))
+      .sort();
+    if (icnsFiles.length > 0) return path.join(bundle.resourcesDir, icnsFiles[0]);
+  }
+
+  return null;
 }
 
 function resolveLargestIconsetPng(iconsetDir: string): string | null {
@@ -178,7 +277,44 @@ function convertIcnsToDataUrl(iconPath: string): string | null {
   }
 }
 
+function getSystemAppIconDataUrl(appPath: string): string | null {
+  const tempPath = path.join(app.getPath('temp'), `launchbox-system-icon-${Date.now()}-${Math.random().toString(36).slice(2)}.png`);
+  const swiftSource = `
+import AppKit
+import Foundation
+
+let targetPath = CommandLine.arguments[1]
+let outputPath = CommandLine.arguments[2]
+let image = NSWorkspace.shared.icon(forFile: targetPath)
+image.size = NSSize(width: 1024, height: 1024)
+
+guard let tiffData = image.tiffRepresentation,
+      let bitmap = NSBitmapImageRep(data: tiffData),
+      let pngData = bitmap.representation(using: .png, properties: [:]) else {
+  fputs("failed\\n", stderr)
+  exit(1)
+}
+
+try pngData.write(to: URL(fileURLWithPath: outputPath))
+`;
+
+  try {
+    execFileSync('swift', ['-e', swiftSource, appPath, tempPath], {
+      stdio: 'ignore',
+    });
+    if (!fs.existsSync(tempPath)) return null;
+    return loadImageDataUrl(tempPath);
+  } catch {
+    return null;
+  } finally {
+    fs.rmSync(tempPath, { force: true });
+  }
+}
+
 function getBundleIconDataUrl(filePath: string): string | null {
+  const systemIcon = getSystemAppIconDataUrl(filePath);
+  if (systemIcon) return systemIcon;
+
   const iconPath = resolveBundleIconPath(filePath);
   if (!iconPath) return null;
 
@@ -192,6 +328,46 @@ function getBundleIconDataUrl(filePath: string): string | null {
 
 function loadImageDataUrl(filePath: string): string | null {
   if (!fs.existsSync(filePath)) return null;
+
+  const extension = path.extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+  };
+  if (mimeTypes[extension]) {
+    let sourcePath = filePath;
+
+    // iOS 包装应用里常见的 CgBI PNG 浏览器无法直接显示，先转成标准 PNG。
+    if (extension === '.png') {
+      const header = fs.readFileSync(filePath).subarray(0, 16);
+      const isCgbiPng = header.includes(Buffer.from('CgBI'));
+      if (isCgbiPng) {
+        const tempPath = path.join(app.getPath('temp'), `launchbox-icon-${Date.now()}.png`);
+        try {
+          execFileSync('sips', ['-s', 'format', 'png', filePath, '--out', tempPath], {
+            stdio: 'ignore',
+          });
+          if (fs.existsSync(tempPath)) {
+            sourcePath = tempPath;
+          }
+        } catch {
+          sourcePath = filePath;
+        }
+      }
+    }
+
+    try {
+      const fileBuffer = fs.readFileSync(sourcePath);
+      return `data:${mimeTypes[extension]};base64,${fileBuffer.toString('base64')}`;
+    } finally {
+      if (sourcePath !== filePath) {
+        fs.rmSync(sourcePath, { force: true });
+      }
+    }
+  }
 
   const image = nativeImage.createFromPath(filePath);
   if (image.isEmpty()) return null;
