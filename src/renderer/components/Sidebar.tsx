@@ -4,10 +4,9 @@ import { useApp } from '../store/AppContext';
 import CategoryModal from './CategoryModal';
 
 export default function Sidebar() {
-  const { data, selectedCategoryId, selectCategory, searchQuery, setSearch, saveSettingsSilent, saveCategorySilent } = useApp();
+  const { data, selectedCategoryId, selectCategory, searchQuery, setSearch, saveSettingsSilent } = useApp();
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [width, setWidth] = useState<number>(() => data?.settings.sidebarWidth ?? 220);
   const resizingRef = useRef(false);
   const startXRef = useRef(0);
@@ -28,16 +27,6 @@ export default function Sidebar() {
       window.clearTimeout(hoverTimerRef.current);
     }
   }, []);
-
-  useEffect(() => {
-    const initialCollapsed: Record<string, boolean> = {};
-    for (const category of categories ?? []) {
-      if (!category.parentId && category.collapsed) {
-        initialCollapsed[category.id] = true;
-      }
-    }
-    setCollapsed(current => ({ ...initialCollapsed, ...current }));
-  }, [categories]);
 
   const categoryChildren = useMemo(() => {
     const childrenMap = new Map<string, Category[]>();
@@ -69,13 +58,6 @@ export default function Sidebar() {
     return tools.filter(tool => descendantIds.has(tool.categoryId)).length;
   };
 
-  const topCategories = categories
-    ? categories
-      .filter(category => !category.parentId && category.id !== 'all')
-      .sort((a, b) => a.order - b.order)
-    : [];
-
-  const allCategory = categories?.find(category => category.id === 'all');
   const activeTopCategoryId = selectedCategoryId === 'all'
     ? null
     : (categories?.find(category => category.id === selectedCategoryId)?.parentId ?? selectedCategoryId);
@@ -110,14 +92,6 @@ export default function Sidebar() {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   }, [saveSettingsSilent, settings, width]);
-
-  const toggleGroup = useCallback((category: Category, nextCollapsed: boolean) => {
-    setCollapsed(current => ({ ...current, [category.id]: nextCollapsed }));
-    void saveCategorySilent({
-      ...category,
-      collapsed: nextCollapsed,
-    });
-  }, [saveCategorySilent]);
 
   const scheduleHoverSelect = useCallback((categoryId: string) => {
     if (!settings?.hoverSwitchCategories) return;
@@ -169,48 +143,12 @@ export default function Sidebar() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 10px' }}>
         <div className="lily-sidebar-section-title">副分栏</div>
 
-        {allCategory && (
-          <CategoryItem
-            category={{ ...allCategory, name: '全部工具' }}
-            count={getCount('all')}
-            selected={selectedCategoryId === 'all'}
-            onClick={() => selectCategory('all')}
-            onHover={() => scheduleHoverSelect('all')}
-            onHoverEnd={clearHoverSelect}
-          />
-        )}
-
         {activeTopCategory && (
           <>
             <div className="lily-sidebar-section-title" style={{ marginTop: 10 }}>
               {activeTopCategory.name}
             </div>
-            <CategoryItem
-              category={{ ...activeTopCategory, icon: activeTopCategory.icon || '📁', name: '全部' }}
-              count={getCount(activeTopCategory.id)}
-              selected={selectedCategoryId === activeTopCategory.id}
-              onClick={() => selectCategory(activeTopCategory.id)}
-              onHover={() => scheduleHoverSelect(activeTopCategory.id)}
-              onHoverEnd={clearHoverSelect}
-              onEdit={() => {
-                setEditingCategory(activeTopCategory);
-                setShowCategoryModal(true);
-              }}
-              leadingControl={activeSubCategories.length > 0 ? (
-                <button
-                  className="sidebar-disclosure"
-                  onClick={event => {
-                    event.stopPropagation();
-                    toggleGroup(activeTopCategory, !(collapsed[activeTopCategory.id] ?? false));
-                  }}
-                  title={(collapsed[activeTopCategory.id] ?? false) ? '展开' : '折叠'}
-                >
-                  {(collapsed[activeTopCategory.id] ?? false) ? '▸' : '▾'}
-                </button>
-              ) : undefined}
-            />
-
-            {!(collapsed[activeTopCategory.id] ?? false) && activeSubCategories.map(child => (
+            {activeSubCategories.map(child => (
               <CategoryItem
                 key={child.id}
                 category={child}
@@ -229,27 +167,15 @@ export default function Sidebar() {
           </>
         )}
 
-        {!activeTopCategory && topCategories.length > 0 && (
-          <>
-            <div className="lily-sidebar-section-title" style={{ marginTop: 10 }}>
-              主分栏
-            </div>
-            {topCategories.map(group => (
-              <CategoryItem
-                key={group.id}
-                category={group}
-                count={getCount(group.id)}
-                selected={false}
-                onClick={() => selectCategory(group.id)}
-                onHover={() => scheduleHoverSelect(group.id)}
-                onHoverEnd={clearHoverSelect}
-                onEdit={() => {
-                  setEditingCategory(group);
-                  setShowCategoryModal(true);
-                }}
-              />
-            ))}
-          </>
+        {!activeTopCategory && (
+          <div style={{
+            padding: '14px 10px',
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}>
+            先从顶部选择一个大分类
+          </div>
         )}
 
         <button
