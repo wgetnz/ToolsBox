@@ -34,9 +34,9 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
 
   const dims = {
-    small: { width: 140, height: 110, iconSize: 28, nameFontSize: 12 },
-    medium: { width: 180, height: 140, iconSize: 36, nameFontSize: 14 },
-    large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
+    small: { width: 108, height: 96, iconSize: 26, nameFontSize: 11 },
+    medium: { width: 124, height: 108, iconSize: 32, nameFontSize: 12 },
+    large: { width: 144, height: 124, iconSize: 38, nameFontSize: 13 },
   }[size];
 
   const handleLaunch = async (event: React.MouseEvent) => {
@@ -65,74 +65,47 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
           <div className="tool-card-accent" style={{ background: tool.accentColor }} />
         )}
 
-        <div style={{ padding: '12px 12px 12px 16px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ position: 'absolute', top: 8, right: 8 }}>
+        <div className="lily-tool-card-body">
+          <div style={{ position: 'absolute', top: 6, right: 6 }}>
             <span className="type-badge">{TYPE_LABELS[tool.type]}</span>
           </div>
 
-          <div style={{
-            width: dims.iconSize + 16,
-            height: dims.iconSize + 16,
-            borderRadius: 10,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 8,
-            overflow: 'hidden',
-            flexShrink: 0,
-          }}>
+          <div
+            className="lily-tool-icon-wrap"
+            style={{
+              width: dims.iconSize + 16,
+              height: dims.iconSize + 16,
+            }}
+          >
             {tool.icon
               ? <img src={tool.icon} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               : <span style={{ fontSize: dims.iconSize }}>{TYPE_ICONS[tool.type] ?? '🔧'}</span>
             }
           </div>
 
-          <div style={{
-            fontSize: dims.nameFontSize,
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            lineHeight: 1.3,
-          }}>
+          <div
+            className="lily-tool-name"
+            style={{
+              fontSize: dims.nameFontSize,
+            }}
+          >
             {tool.name}
           </div>
 
-          {tool.description && size !== 'small' && (
-            <div style={{
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              marginTop: 3,
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical' as const,
-            }}>
+          {tool.description && size === 'large' && (
+            <div className="lily-tool-description">
               {tool.description}
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', width: '100%' }}>
             {tool.useCount > 0 && (
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{tool.useCount}次</span>
             )}
             {hover && (
               <button
-                style={{
-                  marginLeft: 'auto',
-                  width: 26,
-                  height: 26,
-                  background: tool.accentColor || 'var(--accent-color)',
-                  border: 'none',
-                  borderRadius: 7,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 12,
-                  color: '#fff',
-                }}
+                className="lily-launch-button"
+                style={{ background: tool.accentColor || 'var(--accent-color)' }}
                 onClick={handleLaunch}
                 title="启动"
               >

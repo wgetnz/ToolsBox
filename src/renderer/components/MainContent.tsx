@@ -66,16 +66,6 @@ export default function MainContent() {
     return selected.parentId ?? selected.id;
   }, [data, selectedCategoryId]);
 
-  const activeChildTabs = useMemo(() => {
-    if (!data || !activeTopCategoryId) return [];
-    const children = data.categories
-      .filter(category => category.parentId === activeTopCategoryId)
-      .sort((a, b) => a.order - b.order);
-    if (children.length === 0) return [];
-    const parent = data.categories.find(category => category.id === activeTopCategoryId);
-    return parent ? [parent, ...children] : children;
-  }, [activeTopCategoryId, data]);
-
   const filtered = useMemo(() => {
     if (!data) return [];
     let tools = data.tools;
@@ -131,45 +121,28 @@ export default function MainContent() {
       {topCategories.length > 0 && (
         <div style={{
           display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          padding: '14px 20px 12px',
+          gap: 6,
+          padding: '10px 14px 0',
           borderBottom: '1px solid var(--border-color)',
           background: 'var(--bg-secondary)',
           flexShrink: 0,
+          overflowX: 'auto',
         }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            className={`top-category-tab lily-top-tab${selectedCategoryId === 'all' ? ' active' : ''}`}
+            onClick={() => selectCategory('all')}
+          >
+            全部工具
+          </button>
+          {topCategories.map(category => (
             <button
-              className={`top-category-tab${selectedCategoryId === 'all' ? ' active' : ''}`}
-              onClick={() => selectCategory('all')}
+              key={category.id}
+              className={`top-category-tab lily-top-tab${activeTopCategoryId === category.id ? ' active' : ''}`}
+              onClick={() => selectCategory(category.id)}
             >
-              全部
+              {category.name}
             </button>
-            {topCategories.map(category => (
-              <button
-                key={category.id}
-                className={`top-category-tab${activeTopCategoryId === category.id ? ' active' : ''}`}
-                onClick={() => selectCategory(category.id)}
-              >
-                <span>{category.icon}</span>
-                <span>{category.name}</span>
-              </button>
-            ))}
-          </div>
-
-          {activeChildTabs.length > 1 && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {activeChildTabs.map(category => (
-                <button
-                  key={category.id}
-                  className={`sub-category-tab${selectedCategoryId === category.id ? ' active' : ''}`}
-                  onClick={() => selectCategory(category.id)}
-                >
-                  {category.id === activeTopCategoryId ? '全部' : `${category.icon} ${category.name}`}
-                </button>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
       )}
 

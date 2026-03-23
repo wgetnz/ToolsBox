@@ -76,6 +76,15 @@ export default function Sidebar() {
     : [];
 
   const allCategory = categories?.find(category => category.id === 'all');
+  const activeTopCategoryId = selectedCategoryId === 'all'
+    ? null
+    : (categories?.find(category => category.id === selectedCategoryId)?.parentId ?? selectedCategoryId);
+  const activeTopCategory = activeTopCategoryId
+    ? categories?.find(category => category.id === activeTopCategoryId) ?? null
+    : null;
+  const activeSubCategories = activeTopCategoryId
+    ? (categoryChildren.get(activeTopCategoryId) ?? [])
+    : [];
 
   const recentTools = [...tools]
     .filter(tool => tool.lastUsed)
@@ -162,19 +171,12 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
-        <div style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: 'var(--text-muted)',
-          padding: '8px 8px 4px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.8px',
-        }}>分类</div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 10px' }}>
+        <div className="lily-sidebar-section-title">副分栏</div>
 
         {allCategory && (
           <CategoryItem
-            category={allCategory}
+            category={{ ...allCategory, name: '全部工具' }}
             count={getCount('all')}
             selected={selectedCategoryId === 'all'}
             onClick={() => selectCategory('all')}
@@ -183,16 +185,66 @@ export default function Sidebar() {
           />
         )}
 
-        {topCategories.map(group => {
-          const children = categoryChildren.get(group.id) ?? [];
-          const isCollapsed = collapsed[group.id] ?? false;
+        {activeTopCategory && (
+          <>
+            <div className="lily-sidebar-section-title" style={{ marginTop: 10 }}>
+              {activeTopCategory.name}
+            </div>
+            <CategoryItem
+              category={{ ...activeTopCategory, icon: activeTopCategory.icon || '📁', name: '全部' }}
+              count={getCount(activeTopCategory.id)}
+              selected={selectedCategoryId === activeTopCategory.id}
+              onClick={() => selectCategory(activeTopCategory.id)}
+              onHover={() => scheduleHoverSelect(activeTopCategory.id)}
+              onHoverEnd={clearHoverSelect}
+              onEdit={() => {
+                setEditingCategory(activeTopCategory);
+                setShowCategoryModal(true);
+              }}
+              leadingControl={activeSubCategories.length > 0 ? (
+                <button
+                  className="sidebar-disclosure"
+                  onClick={event => {
+                    event.stopPropagation();
+                    toggleGroup(activeTopCategory, !(collapsed[activeTopCategory.id] ?? false));
+                  }}
+                  title={(collapsed[activeTopCategory.id] ?? false) ? '展开' : '折叠'}
+                >
+                  {(collapsed[activeTopCategory.id] ?? false) ? '▸' : '▾'}
+                </button>
+              ) : undefined}
+            />
 
-          return (
-            <div key={group.id}>
+            {!(collapsed[activeTopCategory.id] ?? false) && activeSubCategories.map(child => (
               <CategoryItem
+                key={child.id}
+                category={child}
+                count={getCount(child.id)}
+                selected={selectedCategoryId === child.id}
+                onClick={() => selectCategory(child.id)}
+                onHover={() => scheduleHoverSelect(child.id)}
+                onHoverEnd={clearHoverSelect}
+                onEdit={() => {
+                  setEditingCategory(child);
+                  setShowCategoryModal(true);
+                }}
+                indent
+              />
+            ))}
+          </>
+        )}
+
+        {!activeTopCategory && topCategories.length > 0 && (
+          <>
+            <div className="lily-sidebar-section-title" style={{ marginTop: 10 }}>
+              主分栏
+            </div>
+            {topCategories.map(group => (
+              <CategoryItem
+                key={group.id}
                 category={group}
                 count={getCount(group.id)}
-                selected={selectedCategoryId === group.id}
+                selected={false}
                 onClick={() => selectCategory(group.id)}
                 onHover={() => scheduleHoverSelect(group.id)}
                 onHoverEnd={clearHoverSelect}
@@ -200,39 +252,10 @@ export default function Sidebar() {
                   setEditingCategory(group);
                   setShowCategoryModal(true);
                 }}
-                leadingControl={children.length > 0 ? (
-                  <button
-                    className="sidebar-disclosure"
-                    onClick={event => {
-                      event.stopPropagation();
-                      toggleGroup(group, !isCollapsed);
-                    }}
-                    title={isCollapsed ? '展开' : '折叠'}
-                  >
-                    {isCollapsed ? '▸' : '▾'}
-                  </button>
-                ) : undefined}
               />
-
-              {!isCollapsed && children.map(child => (
-                <CategoryItem
-                  key={child.id}
-                  category={child}
-                  count={getCount(child.id)}
-                  selected={selectedCategoryId === child.id}
-                  onClick={() => selectCategory(child.id)}
-                  onHover={() => scheduleHoverSelect(child.id)}
-                  onHoverEnd={clearHoverSelect}
-                  onEdit={() => {
-                    setEditingCategory(child);
-                    setShowCategoryModal(true);
-                  }}
-                  indent
-                />
-              ))}
-            </div>
-          );
-        })}
+            ))}
+          </>
+        )}
 
         <button
           className="btn btn-ghost"
@@ -247,14 +270,9 @@ export default function Sidebar() {
 
         {recentTools.length > 0 && (
           <>
-            <div style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              padding: '16px 8px 4px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.8px',
-            }}>最近使用</div>
+            <div className="lily-sidebar-section-title" style={{ marginTop: 14 }}>
+              最近使用
+            </div>
 
             {recentTools.map(tool => (
               <div key={tool.id} className="sidebar-item" onClick={() => selectCategory(tool.categoryId)}>
