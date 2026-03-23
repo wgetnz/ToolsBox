@@ -272,11 +272,11 @@ Lily 的双轴导航已在本项目落地：
 - **主分栏**：顶级分类（`parentId` 为空），对应 Lily 的 mainType
 - **副分栏**：当前主分栏下的子分类（`parentId = 顶级id`），对应 Lily 的 TabData
 
-**当前导航结构：**
-- `MainContent` 顶部：主分栏 Tab 栏（`lily-top-tab`），点击切换当前主分栏
-- `Sidebar` 左侧：
-  - 处于"全部"视图时：显示主分栏入口列表
-  - 选中某主分栏时：显示该分栏的副分栏列表（含"全部"子项）
+**当前导航结构（严格分离，cd030b1 后）：**
+- `MainContent` 顶部：**仅**主分栏 Tab 栏（`lily-top-tab`），点击/悬停切换当前主分栏
+- `Sidebar` 左侧：**仅**副分栏列表，显示当前激活主分栏的子分类
+  - 无主分栏激活（选中 all）时：显示"先从顶部选择一个大分类"提示
+  - **Sidebar 不展示任何主分类入口**（这是设计约束，不得回退）
 - 侧边栏 section 标题用 `.lily-sidebar-section-title` CSS 类
 
 规则：
@@ -285,7 +285,7 @@ Lily 的双轴导航已在本项目落地：
 - 选中主分栏时，过滤该分栏及其所有子分类的工具（BFS Set）
 - 删除主分栏时，递归删除所有后代分类，相关工具移至 `misc`
 - `all` 是内置特殊分类，不可删除/编辑
-- 分类折叠状态（`collapsed`）持久化到数据层，使用 `saveCategorySilent` 静默保存
+- 分类折叠（`collapsed`）已从 Sidebar 移除，`saveCategorySilent` 不再由 Sidebar 调用
 
 **lily- 前缀 CSS 类（已在 global.css 定义）：**
 - `.lily-sidebar-section-title` — 侧边栏分区标题
@@ -296,7 +296,7 @@ Lily 的双轴导航已在本项目落地：
 - `.lily-tool-description` — 卡片描述（仅 large 尺寸显示）
 - `.lily-launch-button` — 悬停启动按钮
 - `.lily-titlebar-button` — 标题栏操作按钮
-- `.sidebar-disclosure` — 分类折叠展开按钮
+- `.sidebar-disclosure` — 分类折叠展开按钮（当前 Sidebar 未使用，保留定义）
 
 ---
 
@@ -310,6 +310,7 @@ Lily 的双轴导航已在本项目落地：
 2. **ToolModal 分类下拉**：当前下拉只展示真正的叶子分类；编辑历史数据时，如果原分类已不是叶子，也会临时补入当前值，避免表单丢值
 3. **侧边栏宽度恢复**：`Sidebar` 已在数据加载后同步 `sidebarWidth`，重启后会恢复已保存宽度
 4. **分类折叠持久化**：折叠/展开状态已静默写回分类数据，不再弹保存提示
+5. **主/副分栏严格分离**（`cd030b1`）：Sidebar 仅展示副分栏，主分栏 Tab 仅在顶部，两者完全隔离
 
 ---
 
@@ -348,15 +349,14 @@ npm run pack         # 打包 macOS .app（ad-hoc 签名）
 已完成：
 - Lily → ToolsBox macOS 迁移主干（数据模型、启动逻辑、UI、CSS 设计系统）
 - 两级分类树（主分栏/副分栏双轴导航，对齐 Lily 结构）
-- 顶部主分栏 Tab 栏 + 侧边栏副分栏联动
+- 顶部主分栏 Tab 栏 + 侧边栏副分栏联动（严格分离，`cd030b1`）
 - 顶部主分栏 Tab 支持悬停切换（与侧边栏悬停行为一致，`hoverSwitchCategories` 控制）
-- 侧边栏移除最近使用区块（用户明确不需要）
+- 侧边栏移除最近使用区块、折叠逻辑和主分类入口（当前 Sidebar 纯副分栏）
 - 拖拽侧边栏宽度、网格/列表视图切换
 - 系统主题跟随（light/dark/system）
 - 拖放文件自动识别类型 + 提取 .app 图标
 - 参数解析升级（`parseArgs`，支持引号/转义）
 - 数据加载时自动 sanitize + 损坏备份
-- 分类折叠状态持久化（`saveCategorySilent`）
 - 工具卡片紧凑化，lily- 前缀 CSS 类体系建立
 - 测试：`launcher.test.js`、`store.test.js`
 - CI 检查：`npm run lint`、`npm run typecheck`、`npm test`、`npm run build` 全部通过
