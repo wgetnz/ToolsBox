@@ -247,6 +247,7 @@ const {
   // 方法
   saveTool, deleteTool,
   saveCategory, deleteCategory,
+  saveCategorySilent,      // 保存分类但不弹 Toast（用于折叠状态等高频同步）
   saveSettings,            // 保存并弹 Toast
   saveSettingsSilent,      // 保存但不弹 Toast（用于频繁触发：拖拽宽度、视图切换）
   launchTool,
@@ -281,16 +282,20 @@ const {
 - 选中顶级分类时，`MainContent` 需同时显示该分类下的工具 **及其所有子分类的工具**
 - 删除顶级分类时，递归删除所有后代分类，相关工具移至 `misc`
 - `all` 是内置特殊分类，不可删除/编辑
-- 分类折叠状态（`collapsed`）持久化到数据层，使用 `saveSettingsSilent` 静默保存
+- 分类折叠状态（`collapsed`）持久化到数据层，使用 `saveCategorySilent` 静默保存
 
 ---
 
 ## 十、已知问题 / 待修复
 
-以下问题已被记录在 `notes/远端更新审计.md`，尚未修复：
+当前没有新的阻断级已知问题。
 
-1. **父分类选中逻辑**：`MainContent` 过滤只匹配 `categoryId === selectedCategoryId`，当选中父分类时，子分类的工具不会显示 → 应改为：选中父分类时，过滤条件包含该分类及所有直接子分类
-2. **ToolModal 分类下拉**：注释说"只显示叶子分类"，但实际只排除了 `all`，父分类也可选 → 注释与行为不一致，需要统一（要么真正只显示叶子，要么改注释）
+以下历史问题已在当前分支修复完成：
+
+1. **父分类选中逻辑**：`MainContent` 现在会在选中顶级分类时，连同其全部后代分类一起过滤工具
+2. **ToolModal 分类下拉**：当前下拉只展示真正的叶子分类；编辑历史数据时，如果原分类已不是叶子，也会临时补入当前值，避免表单丢值
+3. **侧边栏宽度恢复**：`Sidebar` 已在数据加载后同步 `sidebarWidth`，重启后会恢复已保存宽度
+4. **分类折叠持久化**：折叠/展开状态已静默写回分类数据，不再弹保存提示
 
 ---
 
@@ -329,6 +334,7 @@ npm run pack         # 打包 macOS .app（ad-hoc 签名）
 已完成：
 - Lily → ToolsBox macOS 迁移主干（数据模型、启动逻辑、UI、CSS 设计系统）
 - 两级分类树、拖拽侧边栏宽度、网格/列表视图切换
+- 侧边栏悬停切换分类、顶部分类分栏与子分栏
 - 系统主题跟随（light/dark/system）
 - 拖放文件自动识别类型 + 提取 .app 图标
 - 参数解析升级（`parseArgs`，支持引号/转义）
@@ -338,9 +344,8 @@ npm run pack         # 打包 macOS .app（ad-hoc 签名）
 - CI 检查：`npm run lint`、`npm run typecheck`、`npm test`、`npm run build` 全部通过
 
 待处理（优先级从高到低）：
-1. `MainContent` 父分类选中时需显示子分类工具（逻辑 bug）
-2. `ToolModal` 分类下拉注释与行为不一致（低优先级）
-3. `docs/ROADMAP.md` 中已规划但未完全落地的 Phase 1-5 后续能力
+1. `docs/ROADMAP.md` 中已规划但未完全落地的 Phase 1-5 后续能力
+2. Electron 原生交互的持续手工回归（托盘、窗口关闭行为、主题切换、文件拖放）
 
 ---
 
