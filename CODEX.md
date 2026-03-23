@@ -267,22 +267,36 @@ const {
 
 ## 九、分类系统
 
-两级树结构：
+Lily 的双轴导航已在本项目落地：
 
-```
-顶级分类（parentId 为空）
-  ├── 子分类（parentId = 顶级 id）
-  └── 子分类
-顶级分类（无子分类，可直接关联工具）
-```
+- **主分栏**：顶级分类（`parentId` 为空），对应 Lily 的 mainType
+- **副分栏**：当前主分栏下的子分类（`parentId = 顶级id`），对应 Lily 的 TabData
+
+**当前导航结构：**
+- `MainContent` 顶部：主分栏 Tab 栏（`lily-top-tab`），点击切换当前主分栏
+- `Sidebar` 左侧：
+  - 处于"全部"视图时：显示主分栏入口列表
+  - 选中某主分栏时：显示该分栏的副分栏列表（含"全部"子项）
+- 侧边栏 section 标题用 `.lily-sidebar-section-title` CSS 类
 
 规则：
 - 最多两级，不支持三级
-- 工具的 `categoryId` 指向任意分类（顶级或子级均可）
-- 选中顶级分类时，`MainContent` 需同时显示该分类下的工具 **及其所有子分类的工具**
-- 删除顶级分类时，递归删除所有后代分类，相关工具移至 `misc`
+- 工具的 `categoryId` 可指向主分栏或副分栏
+- 选中主分栏时，过滤该分栏及其所有子分类的工具（BFS Set）
+- 删除主分栏时，递归删除所有后代分类，相关工具移至 `misc`
 - `all` 是内置特殊分类，不可删除/编辑
 - 分类折叠状态（`collapsed`）持久化到数据层，使用 `saveCategorySilent` 静默保存
+
+**lily- 前缀 CSS 类（已在 global.css 定义）：**
+- `.lily-sidebar-section-title` — 侧边栏分区标题
+- `.lily-top-tab` — 顶部主分栏 Tab 按钮
+- `.lily-tool-card-body` — 工具卡片内容区
+- `.lily-tool-icon-wrap` — 图标容器
+- `.lily-tool-name` — 卡片名称
+- `.lily-tool-description` — 卡片描述（仅 large 尺寸显示）
+- `.lily-launch-button` — 悬停启动按钮
+- `.lily-titlebar-button` — 标题栏操作按钮
+- `.sidebar-disclosure` — 分类折叠展开按钮
 
 ---
 
@@ -333,19 +347,23 @@ npm run pack         # 打包 macOS .app（ad-hoc 签名）
 
 已完成：
 - Lily → ToolsBox macOS 迁移主干（数据模型、启动逻辑、UI、CSS 设计系统）
-- 两级分类树、拖拽侧边栏宽度、网格/列表视图切换
-- 侧边栏悬停切换分类、顶部分类分栏与子分栏
+- 两级分类树（主分栏/副分栏双轴导航，对齐 Lily 结构）
+- 顶部主分栏 Tab 栏 + 侧边栏副分栏联动
+- 拖拽侧边栏宽度、网格/列表视图切换
+- 侧边栏悬停切换分类（`hoverSwitchCategories` 设置项控制）
 - 系统主题跟随（light/dark/system）
 - 拖放文件自动识别类型 + 提取 .app 图标
 - 参数解析升级（`parseArgs`，支持引号/转义）
 - 数据加载时自动 sanitize + 损坏备份
-- 分类折叠状态持久化
+- 分类折叠状态持久化（`saveCategorySilent`）
+- 工具卡片紧凑化，lily- 前缀 CSS 类体系建立
 - 测试：`launcher.test.js`、`store.test.js`
 - CI 检查：`npm run lint`、`npm run typecheck`、`npm test`、`npm run build` 全部通过
 
 待处理（优先级从高到低）：
-1. `docs/ROADMAP.md` 中已规划但未完全落地的 Phase 1-5 后续能力
-2. Electron 原生交互的持续手工回归（托盘、窗口关闭行为、主题切换、文件拖放）
+1. 继续向 Lily 视觉语言收敛（右键菜单、编辑弹窗分栏、更多交互细节）
+2. `docs/ROADMAP.md` 中已规划但未完全落地的 Phase 1-5 后续能力
+3. Electron 原生交互的持续手工回归（托盘、窗口关闭行为、主题切换、文件拖放）
 
 ---
 
