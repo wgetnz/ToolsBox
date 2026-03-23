@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer, useCallback } from 'react';
-import { AppData, Tool, Category, AppSettings } from '../../shared/types';
+import { AppData, BackupEntry, BackupResult, ClearAllDataResult, DeleteBackupResult, RestoreBackupResult, Tool, Category, AppSettings, ImportInstalledAppsResult } from '../../shared/types';
 
 declare global {
   interface Window {
@@ -10,6 +10,11 @@ declare global {
       saveCategory: (category: Category) => Promise<Category[]>;
       deleteCategory: (categoryId: string) => Promise<{ categories: Category[]; tools: Tool[] }>;
       saveSettings: (settings: AppSettings) => Promise<AppSettings>;
+      createBackup: (preferredDirectory?: string) => Promise<BackupResult>;
+      listBackups: (preferredDirectory?: string) => Promise<BackupEntry[]>;
+      deleteBackup: (backupPath: string) => Promise<DeleteBackupResult>;
+      clearAllData: () => Promise<ClearAllDataResult>;
+      restoreBackup: (backupPath: string) => Promise<RestoreBackupResult>;
       launchTool: (toolId: string) => Promise<{ success: boolean; error?: string }>;
       selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;
@@ -17,7 +22,10 @@ declare global {
       showInFinder: (filePath: string) => Promise<void>;
       windowControl: (action: 'minimize' | 'maximize' | 'close') => Promise<void>;
       getFileIcon: (filePath: string) => Promise<string | null>;
+      importInstalledApps: () => Promise<ImportInstalledAppsResult>;
+      loadImageDataUrl: (filePath: string) => Promise<string | null>;
       onNativeThemeChanged: (cb: (isDark: boolean) => void) => () => void;
+      onOpenSettingsRequested: (cb: () => void) => () => void;
     };
   }
 }
@@ -33,6 +41,7 @@ interface AppState {
   loading: boolean;
   selectedCategoryId: string;
   searchQuery: string;
+  searchScope: 'all' | 'current';
   viewMode: 'grid' | 'list';
   toasts: Toast[];
 }
@@ -45,6 +54,7 @@ type Action =
   | { type: 'SET_SETTINGS'; payload: AppSettings }
   | { type: 'SELECT_CATEGORY'; payload: string }
   | { type: 'SET_SEARCH'; payload: string }
+  | { type: 'SET_SEARCH_SCOPE'; payload: 'all' | 'current' }
   | { type: 'SET_VIEW_MODE'; payload: 'grid' | 'list' }
   | { type: 'ADD_TOAST'; payload: Toast }
   | { type: 'REMOVE_TOAST'; payload: string };
@@ -65,6 +75,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, selectedCategoryId: action.payload };
     case 'SET_SEARCH':
       return { ...state, searchQuery: action.payload };
+    case 'SET_SEARCH_SCOPE':
+      return { ...state, searchScope: action.payload };
     case 'SET_VIEW_MODE':
       return { ...state, viewMode: action.payload };
     case 'ADD_TOAST':
@@ -84,14 +96,21 @@ interface AppContextValue extends AppState {
   deleteCategory: (categoryId: string) => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   saveSettingsSilent: (settings: AppSettings) => Promise<void>;
+  createBackup: (preferredDirectory?: string) => Promise<BackupResult>;
+  listBackups: (preferredDirectory?: string) => Promise<BackupEntry[]>;
+  deleteBackup: (backupPath: string) => Promise<void>;
+  clearAllData: () => Promise<void>;
+  restoreBackup: (backupPath: string) => Promise<void>;
   launchTool: (toolId: string) => Promise<void>;
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
   selectDirectory: () => Promise<string | null>;
   openInTerminal: (dirPath: string) => Promise<void>;
   showInFinder: (filePath: string) => Promise<void>;
+  importInstalledApps: () => Promise<void>;
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   selectCategory: (id: string) => void;
   setSearch: (q: string) => void;
+  setSearchScope: (scope: 'all' | 'current') => void;
   setViewMode: (mode: 'grid' | 'list') => void;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
@@ -100,12 +119,20 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 let toastIdCounter = 0;
 
+function getInitialCategoryId(data: AppData): string {
+  const firstTopCategory = data.categories
+    .filter(category => !category.parentId && category.id !== 'all')
+    .sort((a, b) => a.order - b.order)[0];
+  return firstTopCategory?.id ?? 'all';
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {
     data: null,
     loading: true,
-    selectedCategoryId: 'all',
+    selectedCategoryId: '',
     searchQuery: '',
+    searchScope: 'all',
     viewMode: 'grid',
     toasts: [],
   });
@@ -113,9 +140,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     window.launchbox.getData().then(data => {
       dispatch({ type: 'SET_DATA', payload: data });
+      dispatch({ type: 'SELECT_CATEGORY', payload: getInitialCategoryId(data) });
       if (data.settings.viewMode) {
         dispatch({ type: 'SET_VIEW_MODE', payload: data.settings.viewMode });
       }
+      dispatch({ type: 'SET_SEARCH_SCOPE', payload: data.settings.searchScope ?? 'all' });
     });
   }, []);
 
@@ -152,9 +181,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const result = await window.launchbox.deleteCategory(categoryId);
     dispatch({ type: 'SET_CATEGORIES', payload: result.categories });
     dispatch({ type: 'SET_TOOLS', payload: result.tools });
-    dispatch({ type: 'SELECT_CATEGORY', payload: 'all' });
+    dispatch({
+      type: 'SELECT_CATEGORY',
+      payload: getInitialCategoryId({
+        categories: result.categories,
+        tools: result.tools,
+        settings: state.data?.settings ?? {
+          theme: 'system',
+          fontSize: 'medium',
+          cardSize: 'medium',
+          viewMode: 'grid',
+          searchScope: 'all',
+          sidebarWidth: 220,
+          hoverSwitchCategories: true,
+          javaEnvs: [],
+          pythonEnvs: [],
+          ai: {
+            enabled: true,
+            forceOverwrite: false,
+            provider: 'openai',
+            apiKey: '',
+            baseUrl: 'https://api.openai.com/v1',
+            model: '',
+            prompt: '',
+          },
+          backup: {
+            enabled: false,
+            directory: '',
+            keepCount: 10,
+            mode: 'interval',
+            intervalHours: 24,
+            dailyTime: '03:00',
+            weeklyDay: 0,
+            weeklyTime: '03:00',
+          },
+          startAtLogin: false,
+          minimizeToTray: true,
+        },
+      }),
+    });
     showToast('success', '分类已删除');
-  }, [showToast]);
+  }, [showToast, state.data?.settings]);
 
   const saveSettings = useCallback(async (settings: AppSettings) => {
     const saved = await window.launchbox.saveSettings(settings);
@@ -188,6 +255,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openInTerminal = useCallback((dirPath: string) => window.launchbox.openInTerminal(dirPath), []);
   const showInFinder = useCallback((filePath: string) => window.launchbox.showInFinder(filePath), []);
 
+  const importInstalledApps = useCallback(async () => {
+    const result = await window.launchbox.importInstalledApps();
+    dispatch({ type: 'SET_CATEGORIES', payload: result.categories });
+    dispatch({ type: 'SET_TOOLS', payload: result.tools });
+    showToast('success', `已导入 ${result.added} 个 App，跳过 ${result.skipped} 个已有条目`);
+  }, [showToast]);
+
+  const createBackup = useCallback(async (preferredDirectory?: string) => {
+    const result = await window.launchbox.createBackup(preferredDirectory);
+    const data = await window.launchbox.getData();
+    dispatch({ type: 'SET_DATA', payload: data });
+    showToast('success', `备份已创建: ${result.path.split('/').pop() ?? 'backup.json'}`);
+    return result;
+  }, [showToast]);
+
+  const listBackups = useCallback((preferredDirectory?: string) => {
+    return window.launchbox.listBackups(preferredDirectory);
+  }, []);
+
+  const deleteBackup = useCallback(async (backupPath: string) => {
+    await window.launchbox.deleteBackup(backupPath);
+    showToast('success', `备份已删除: ${backupPath.split('/').pop() ?? 'backup.json'}`);
+  }, [showToast]);
+
+  const clearAllData = useCallback(async () => {
+    const result = await window.launchbox.clearAllData();
+    dispatch({ type: 'SET_DATA', payload: result.data });
+    dispatch({ type: 'SELECT_CATEGORY', payload: getInitialCategoryId(result.data) });
+    dispatch({ type: 'SET_VIEW_MODE', payload: result.data.settings.viewMode });
+    dispatch({ type: 'SET_SEARCH', payload: '' });
+    showToast('success', result.backup ? '数据已清空，清空前备份已完成' : '数据已清空');
+  }, [showToast]);
+
+  const restoreBackup = useCallback(async (backupPath: string) => {
+    const result = await window.launchbox.restoreBackup(backupPath);
+    dispatch({ type: 'SET_DATA', payload: result.data });
+    dispatch({ type: 'SELECT_CATEGORY', payload: getInitialCategoryId(result.data) });
+    dispatch({ type: 'SET_VIEW_MODE', payload: result.data.settings.viewMode });
+    dispatch({ type: 'SET_SEARCH', payload: '' });
+    showToast('success', result.backup ? '备份已恢复，恢复前数据已自动备份' : '备份已恢复');
+  }, [showToast]);
+
   const windowControl = useCallback((action: 'minimize' | 'maximize' | 'close') => {
     window.launchbox.windowControl(action);
   }, []);
@@ -198,6 +307,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setSearch = useCallback((q: string) => {
     dispatch({ type: 'SET_SEARCH', payload: q });
+  }, []);
+
+  const setSearchScope = useCallback((scope: 'all' | 'current') => {
+    dispatch({ type: 'SET_SEARCH_SCOPE', payload: scope });
   }, []);
 
   const setViewMode = useCallback((mode: 'grid' | 'list') => {
@@ -214,14 +327,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteCategory,
       saveSettings,
       saveSettingsSilent,
+      createBackup,
+      listBackups,
+      deleteBackup,
+      clearAllData,
+      restoreBackup,
       launchTool,
       selectFile,
       selectDirectory,
       openInTerminal,
       showInFinder,
+      importInstalledApps,
       windowControl,
       selectCategory,
       setSearch,
+      setSearchScope,
       setViewMode,
       showToast,
     }}>

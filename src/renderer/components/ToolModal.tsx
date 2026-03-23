@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Tool, ToolType } from '../../shared/types';
 import { useApp } from '../store/AppContext';
+import { getToolFallbackIcon } from '../utils/toolIcons';
 
 const TOOL_TYPES: { value: ToolType; label: string; icon: string }[] = [
   { value: 'jar', label: 'JAR 包', icon: '☕' },
   { value: 'python', label: 'Python 脚本', icon: '🐍' },
   { value: 'shell', label: 'Shell 脚本', icon: '💻' },
-  { value: 'executable', label: '可执行文件', icon: '⚡' },
-  { value: 'app', label: 'macOS App', icon: '📱' },
+  { value: 'executable', label: '可执行文件', icon: '⚙️' },
+  { value: 'app', label: 'macOS App', icon: '🧩' },
   { value: 'url', label: 'URL / 网页', icon: '🌐' },
 ];
 
@@ -18,10 +19,11 @@ const ACCENT_COLORS = [
 
 interface Props {
   tool?: Tool | null;
+  initialCategoryId?: string;
   onClose: () => void;
 }
 
-function emptyTool(): Partial<Tool> {
+function emptyTool(initialCategoryId?: string): Partial<Tool> {
   return {
     name: '',
     description: '',
@@ -29,7 +31,7 @@ function emptyTool(): Partial<Tool> {
     path: '',
     args: '',
     workingDirectory: '',
-    categoryId: 'misc',
+    categoryId: initialCategoryId ?? 'misc',
     useCount: 0,
     createdAt: Date.now(),
   };
@@ -44,15 +46,27 @@ function inferType(filePath: string): ToolType {
   return 'executable';
 }
 
-export default function ToolModal({ tool, onClose }: Props) {
+async function resolveToolIcon(filePath: string, type: ToolType): Promise<string | undefined> {
+  if (type === 'url' || !filePath.trim()) return undefined;
+
+  try {
+    const result = await window.launchbox.getFileIcon(filePath);
+    return result ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export default function ToolModal({ tool, initialCategoryId, onClose }: Props) {
   const { data, saveTool, selectFile, selectDirectory } = useApp();
-  const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool());
+  const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool(initialCategoryId));
   const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [resolvingIcon, setResolvingIcon] = useState(false);
 
   useEffect(() => {
-    setForm(tool ? { ...tool } : emptyTool());
-  }, [tool]);
+    setForm(tool ? { ...tool } : emptyTool(initialCategoryId));
+  }, [initialCategoryId, tool]);
 
   const categories = data?.categories;
   const settings = data?.settings;
@@ -60,20 +74,62 @@ export default function ToolModal({ tool, onClose }: Props) {
   const leafCategories = useMemo(() => {
     const resolvedCategories = categories ?? [];
     const parentIds = new Set(resolvedCategories.filter(item => item.parentId).map(item => item.parentId));
-    const leaves = resolvedCategories.filter(item => item.id !== 'all' && !parentIds.has(item.id));
+    return resolvedCategories.filter(item => item.id !== 'all' && !parentIds.has(item.id));
+  }, [categories]);
 
-    if (form.categoryId && form.categoryId !== 'all' && !leaves.some(item => item.id === form.categoryId)) {
-      const currentCategory = resolvedCategories.find(item => item.id === form.categoryId);
-      if (currentCategory) return [...leaves, currentCategory];
-    }
+  useEffect(() => {
+    if (!leafCategories.length) return;
+    if (form.categoryId && leafCategories.some(item => item.id === form.categoryId)) return;
 
-    return leaves;
-  }, [categories, form.categoryId]);
+    const fallbackCategoryId = initialCategoryId && leafCategories.some(item => item.id === initialCategoryId)
+      ? initialCategoryId
+      : leafCategories[0].id;
 
-  if (!data || !settings) return null;
+    setForm(current => ({ ...current, categoryId: fallbackCategoryId }));
+  }, [form.categoryId, initialCategoryId, leafCategories]);
 
   const update = (field: keyof Tool, value: unknown) =>
     setForm(current => ({ ...current, [field]: value }));
+
+  const updateForm = (updater: (current: Partial<Tool>) => Partial<Tool>) => {
+    setForm(current => updater(current));
+  };
+
+  const refreshDefaultIcon = async (filePath: string, type: ToolType) => {
+    setResolvingIcon(true);
+    const icon = await resolveToolIcon(filePath, type);
+    updateForm(current => ({ ...current, icon, iconSource: icon ? 'default' : undefined }));
+    setResolvingIcon(false);
+    return icon;
+  };
+
+  useEffect(() => {
+    if (form.type !== 'app') return;
+    if (!form.path?.trim().endsWith('.app')) return;
+    if (form.iconSource === 'custom') return;
+
+    let cancelled = false;
+
+    void (async () => {
+      setResolvingIcon(true);
+      const icon = await resolveToolIcon(form.path!, 'app');
+      if (!cancelled) {
+        updateForm(current => {
+          if (current.type !== 'app' || current.path !== form.path || current.iconSource === 'custom') {
+            return current;
+          }
+          return { ...current, icon, iconSource: icon ? 'default' : undefined };
+        });
+        setResolvingIcon(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.iconSource, form.path, form.type]);
+
+  if (!data || !settings) return null;
 
   const handleBrowse = async () => {
     let filters: { name: string; extensions: string[] }[] | undefined;
@@ -96,17 +152,47 @@ export default function ToolModal({ tool, onClose }: Props) {
 
     const filePath = await selectFile(filters);
     if (filePath) {
-      update('path', filePath);
-      if (!form.name) {
-        const filename = filePath.split('/').pop() ?? filePath;
-        update('name', filename.replace(/\.[^.]+$/, ''));
-      }
+      const filename = filePath.split('/').pop() ?? filePath;
+      const inferredType = inferType(filePath);
+      const nextName = form.name?.trim() ? form.name : filename.replace(/\.app$/, '').replace(/\.[^.]+$/, '');
+      const nextType = form.type === 'url' ? inferredType : form.type ?? inferredType;
+      setResolvingIcon(true);
+      const icon = await resolveToolIcon(filePath, nextType);
+      setResolvingIcon(false);
+
+      setForm(current => ({
+        ...current,
+        path: filePath,
+        name: current.name?.trim() ? current.name : nextName,
+        type: nextType,
+        icon,
+        iconSource: icon ? 'default' : undefined,
+      }));
     }
   };
 
   const handleBrowseDir = async () => {
     const dir = await selectDirectory();
     if (dir) update('workingDirectory', dir);
+  };
+
+  const handlePathChange = (value: string) => {
+    const inferredType = inferType(value);
+    updateForm(current => {
+      const nextType = value.trim() ? inferredType : current.type;
+      const nextState: Partial<Tool> = {
+        ...current,
+        path: value,
+        type: nextType,
+      };
+
+      if (inferredType !== 'app' && current.iconSource !== 'custom') {
+        nextState.icon = undefined;
+        nextState.iconSource = undefined;
+      }
+
+      return nextState;
+    });
   };
 
   const handleDrop = async (event: React.DragEvent) => {
@@ -118,29 +204,55 @@ export default function ToolModal({ tool, onClose }: Props) {
     const filename = filePath.split('/').pop() ?? filePath;
     const name = filename.replace(/\.app$/, '').replace(/\.[^.]+$/, '');
     const type = inferType(filePath);
+    setResolvingIcon(true);
+    const icon = await resolveToolIcon(filePath, type);
+    setResolvingIcon(false);
 
-    let icon: string | undefined;
+    setForm(current => ({ ...current, name, path: filePath, type, icon, iconSource: icon ? 'default' : undefined }));
+  };
+
+  const handleBrowseCustomIcon = async () => {
+    const imagePath = await selectFile([
+      { name: 'Image Files', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'icns'] },
+    ]);
+    if (!imagePath) return;
+
+    setResolvingIcon(true);
     try {
-      const result = await window.launchbox.getFileIcon(filePath);
-      icon = result ?? undefined;
-    } catch {
-      icon = undefined;
+      const icon = await window.launchbox.loadImageDataUrl(imagePath);
+      if (icon) {
+        setForm(current => ({ ...current, icon, iconSource: 'custom' }));
+      }
+    } finally {
+      setResolvingIcon(false);
     }
-
-    setForm(current => ({ ...current, name, path: filePath, type, icon }));
   };
 
   const handleSave = async () => {
     if (!form.name?.trim()) return;
     if (!form.path?.trim()) return;
     setSaving(true);
-    await saveTool(form as Tool);
+    let nextIcon = form.icon;
+    const inferredType = form.type ?? inferType(form.path);
+    let nextIconSource = form.iconSource;
+    if ((nextIconSource !== 'custom') && inferredType === 'app') {
+      nextIcon = await refreshDefaultIcon(form.path, inferredType);
+      nextIconSource = nextIcon ? 'default' : undefined;
+    }
+    await saveTool({ ...form, type: inferredType, icon: nextIcon, iconSource: nextIconSource } as Tool);
     setSaving(false);
     onClose();
   };
 
   const isEditing = Boolean(tool?.id);
   const showWorkingDir = form.type !== 'url' && form.type !== 'app';
+  const previewType = form.type ?? (form.path ? inferType(form.path) : 'executable');
+  const previewIcon = form.icon;
+  const previewEmoji = getToolFallbackIcon({
+    type: previewType,
+    path: form.path,
+    name: form.name,
+  });
 
   return (
     <div
@@ -264,13 +376,62 @@ export default function ToolModal({ tool, onClose }: Props) {
               <input
                 className="input"
                 value={form.path}
-                onChange={event => update('path', event.target.value)}
+                onChange={event => handlePathChange(event.target.value)}
                 placeholder={form.type === 'url' ? 'https://...' : '/path/to/tool'}
                 style={{ flex: 1 }}
               />
               {form.type !== 'url' && (
                 <button className="btn btn-secondary" onClick={handleBrowse}>浏览</button>
               )}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">工具图标</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: 12, alignItems: 'center' }}>
+              <div
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 16,
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-input)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                {previewIcon
+                  ? <img src={previewIcon} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  : <span style={{ fontSize: 32 }}>{previewEmoji}</span>
+                }
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => void refreshDefaultIcon(form.path ?? '', previewType)}
+                  disabled={!form.path?.trim() || previewType === 'url' || resolvingIcon}
+                >
+                  {resolvingIcon ? '读取中...' : '使用默认图标'}
+                </button>
+                <button className="btn btn-secondary" onClick={handleBrowseCustomIcon} disabled={resolvingIcon}>
+                  自定义图标
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => updateForm(current => ({ ...current, icon: undefined, iconSource: undefined }))}
+                  disabled={!form.icon}
+                >
+                  清除图标
+                </button>
+                <div style={{ width: '100%', fontSize: 12, color: 'var(--text-muted)' }}>
+                  默认会读取应用本体图标，你也可以手动指定 PNG、JPG、WEBP、GIF 或 ICNS。
+                </div>
+                <div style={{ width: '100%', fontSize: 12, color: 'var(--text-muted)' }}>
+                  当前来源：{form.iconSource === 'custom' ? '自定义图标' : form.iconSource === 'default' ? '应用默认图标' : '未设置'}
+                </div>
+              </div>
             </div>
           </div>
 

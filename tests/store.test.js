@@ -18,7 +18,7 @@ test('sanitizeSettings restores invalid enum values and booleans', () => {
   assert.equal(settings.fontSize, 'medium');
   assert.equal(settings.cardSize, 'medium');
   assert.equal(settings.viewMode, 'grid');
-  assert.equal(settings.sidebarWidth, 360);
+  assert.equal(settings.sidebarWidth, 520);
   assert.equal(settings.startAtLogin, false);
   assert.equal(settings.minimizeToTray, true);
 });

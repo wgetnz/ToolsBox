@@ -1,14 +1,31 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Tool } from '../../shared/types';
+import { Category, Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 import ToolCard from './ToolCard';
 import ToolModal from './ToolModal';
+import CategoryModal from './CategoryModal';
+import { getToolFallbackIcon } from '../utils/toolIcons';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 type SortKey = 'name' | 'lastUsed' | 'useCount' | 'createdAt';
 
-const TYPE_ICONS: Record<string, string> = {
-  jar: '☕', python: '🐍', shell: '💻', executable: '⚡', app: '📱', url: '🌐',
-};
+interface Props {
+  onAddTool: (categoryId?: string) => void;
+}
 
 function formatRelativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -21,13 +38,32 @@ function formatRelativeTime(ts: number): string {
   return `${days}天前`;
 }
 
-export default function MainContent() {
-  const { data, selectedCategoryId, searchQuery, viewMode, setViewMode, saveSettingsSilent, launchTool, selectCategory } = useApp();
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase('zh-CN')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+export default function MainContent({ onAddTool }: Props) {
+  const {
+    data,
+    selectedCategoryId,
+    searchQuery,
+    searchScope,
+    viewMode,
+    setViewMode,
+    saveSettingsSilent,
+    launchTool,
+  } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [areaMenu, setAreaMenu] = useState<{ x: number; y: number } | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
-  const hoverTimerRef = React.useRef<number | null>(null);
-
+  const sortMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortAsc(current => !current);
@@ -38,7 +74,7 @@ export default function MainContent() {
   };
 
   const selectedCategoryIds = useMemo(() => {
-    if (!data || selectedCategoryId === 'all') return null;
+    if (!data || !selectedCategoryId) return null;
 
     const ids = new Set([selectedCategoryId]);
     const queue = [selectedCategoryId];
@@ -54,33 +90,57 @@ export default function MainContent() {
     return ids;
   }, [data, selectedCategoryId]);
 
-  const topCategories = useMemo(() => (
-    data?.categories
-      .filter(category => !category.parentId && category.id !== 'all')
-      .sort((a, b) => a.order - b.order) ?? []
-  ), [data]);
-
   const activeTopCategoryId = useMemo(() => {
-    if (!data || selectedCategoryId === 'all') return null;
+    if (!data || !selectedCategoryId) return null;
     const selected = data.categories.find(category => category.id === selectedCategoryId);
     if (!selected) return null;
     return selected.parentId ?? selected.id;
   }, [data, selectedCategoryId]);
 
+  const defaultToolCategoryId = useMemo(() => {
+    if (!data || !selectedCategoryId) return undefined;
+
+    const categoriesById = new Map(data.categories.map(category => [category.id, category]));
+    const parentIds = new Set(data.categories.filter(category => category.parentId).map(category => category.id ? category.parentId! : ''));
+    const isLeaf = (categoryId: string) => !parentIds.has(categoryId);
+
+    if (isLeaf(selectedCategoryId)) return selectedCategoryId;
+
+    const descendants = data.categories
+      .filter(category => category.parentId === selectedCategoryId)
+      .sort((a, b) => a.order - b.order);
+
+    for (const category of descendants) {
+      if (isLeaf(category.id)) return category.id;
+    }
+
+    const activeTopCategory = categoriesById.get(activeTopCategoryId ?? '');
+    if (activeTopCategory && isLeaf(activeTopCategory.id)) return activeTopCategory.id;
+
+    return undefined;
+  }, [activeTopCategoryId, data, selectedCategoryId]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     let tools = data.tools;
+    const categoriesById = new Map(data.categories.map(category => [category.id, category]));
 
-    if (selectedCategoryIds) {
+    const shouldLimitToCurrentCategory = !searchQuery.trim() || searchScope === 'current';
+
+    if (shouldLimitToCurrentCategory && selectedCategoryIds) {
       tools = tools.filter(tool => selectedCategoryIds.has(tool.categoryId));
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = normalizeSearchText(searchQuery);
       tools = tools.filter(tool =>
-        tool.name.toLowerCase().includes(q) ||
-        tool.description?.toLowerCase().includes(q) ||
-        tool.type.toLowerCase().includes(q)
+        [
+          tool.name,
+          tool.description ?? '',
+          tool.type,
+          tool.path,
+          categoriesById.get(tool.categoryId)?.name ?? '',
+        ].some(value => normalizeSearchText(value).includes(q))
       );
     }
 
@@ -102,13 +162,33 @@ export default function MainContent() {
       }
       return sortAsc ? value : -value;
     });
-  }, [data, searchQuery, selectedCategoryIds, sortAsc, sortKey]);
+  }, [data, searchQuery, searchScope, selectedCategoryIds, sortAsc, sortKey]);
 
-  useEffect(() => () => {
-    if (hoverTimerRef.current) {
-      window.clearTimeout(hoverTimerRef.current);
-    }
-  }, []);
+  useEffect(() => {
+    if (!showSortMenu) return undefined;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!sortMenuRef.current?.contains(event.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [showSortMenu]);
+
+  useEffect(() => {
+    if (!areaMenu) return undefined;
+
+    const close = (event: MouseEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setAreaMenu(null);
+    };
+    window.addEventListener('mousedown', close);
+    return () => {
+      window.removeEventListener('mousedown', close);
+    };
+  }, [areaMenu]);
 
   if (!data) {
     return (
@@ -119,130 +199,58 @@ export default function MainContent() {
   }
 
   const cardSize = data.settings.cardSize;
-  const hoverSwitchCategories = data.settings.hoverSwitchCategories;
-  const categoryName = selectedCategoryId === 'all'
-    ? '全部工具'
-    : data.categories.find(category => category.id === selectedCategoryId)?.name ?? '工具';
-
-  const scheduleHoverSelect = (categoryId: string) => {
-    if (!hoverSwitchCategories) return;
-    if (hoverTimerRef.current) {
-      window.clearTimeout(hoverTimerRef.current);
-    }
-    hoverTimerRef.current = window.setTimeout(() => {
-      selectCategory(categoryId);
-    }, 120);
-  };
-
-  const clearHoverSelect = () => {
-    if (hoverTimerRef.current) {
-      window.clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
-  };
-
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {topCategories.length > 0 && (
-        <div style={{
+      <div
+        style={{
           display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
           gap: 6,
-          padding: '10px 14px 0',
+          minHeight: 38,
+          padding: '0 10px',
           borderBottom: '1px solid var(--border-color)',
           background: 'var(--bg-secondary)',
           flexShrink: 0,
-          overflowX: 'auto',
-        }}>
+        }}
+      >
+        <div ref={sortMenuRef} style={{ position: 'relative' }}>
           <button
-            className={`top-category-tab lily-top-tab${selectedCategoryId === 'all' ? ' active' : ''}`}
-            onClick={() => selectCategory('all')}
-            onMouseEnter={() => scheduleHoverSelect('all')}
-            onMouseLeave={clearHoverSelect}
+            className={`lily-toolbar-icon${showSortMenu ? ' active' : ''}`}
+            onClick={() => setShowSortMenu(current => !current)}
+            title="排序选项"
           >
-            全部工具
+            ⇅
           </button>
-          {topCategories.map(category => (
-            <button
-              key={category.id}
-              className={`top-category-tab lily-top-tab${activeTopCategoryId === category.id ? ' active' : ''}`}
-              onClick={() => selectCategory(category.id)}
-              onMouseEnter={() => scheduleHoverSelect(category.id)}
-              onMouseLeave={clearHoverSelect}
-            >
-              {category.name}
-            </button>
-          ))}
-        </div>
-      )}
 
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '10px 20px',
-        borderBottom: '1px solid var(--border-color)',
-        gap: 12,
-        flexShrink: 0,
-      }}>
-        <div>
-          <span style={{ fontWeight: 700, fontSize: 16 }}>{categoryName}</span>
-          <span style={{
-            marginLeft: 8,
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            background: 'var(--bg-tertiary)',
-            padding: '2px 8px',
-            borderRadius: 10,
-          }}>{filtered.length}</span>
+          {showSortMenu && (
+            <div className="lily-toolbar-menu">
+              {([
+                ['name', '名称'],
+                ['lastUsed', '最近使用'],
+                ['useCount', '使用次数'],
+                ['createdAt', '添加时间'],
+              ] as [SortKey, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  className={`lily-toolbar-menu-item${sortKey === key ? ' active' : ''}`}
+                  onClick={() => handleSort(key)}
+                >
+                  <span>{label}</span>
+                  {sortKey === key && <span>{sortAsc ? '↑' : '↓'}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div style={{ flex: 1 }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>排序:</span>
-          {([
-            ['name', '名称'],
-            ['lastUsed', '最近使用'],
-            ['useCount', '使用次数'],
-            ['createdAt', '添加时间'],
-          ] as [SortKey, string][]).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => handleSort(key)}
-              style={{
-                padding: '3px 8px',
-                borderRadius: 6,
-                border: '1px solid var(--border-color)',
-                background: sortKey === key ? 'var(--accent-color)' : 'var(--bg-input)',
-                color: sortKey === key ? '#fff' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 3,
-              }}
-            >
-              {label}
-              {sortKey === key && <span>{sortAsc ? '↑' : '↓'}</span>}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 7, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
             onClick={() => {
               setViewMode('grid');
               void saveSettingsSilent({ ...data.settings, viewMode: 'grid' });
             }}
-            style={{
-              padding: '4px 10px',
-              border: 'none',
-              background: viewMode === 'grid' ? 'var(--accent-color)' : 'transparent',
-              color: viewMode === 'grid' ? '#fff' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: 14,
-              lineHeight: 1,
-            }}
+            className={`lily-toolbar-icon${viewMode === 'grid' ? ' active' : ''}`}
             title="网格视图"
           >⊞</button>
           <button
@@ -250,21 +258,21 @@ export default function MainContent() {
               setViewMode('list');
               void saveSettingsSilent({ ...data.settings, viewMode: 'list' });
             }}
-            style={{
-              padding: '4px 10px',
-              border: 'none',
-              background: viewMode === 'list' ? 'var(--accent-color)' : 'transparent',
-              color: viewMode === 'list' ? '#fff' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: 14,
-              lineHeight: 1,
-            }}
+            className={`lily-toolbar-icon${viewMode === 'list' ? ' active' : ''}`}
             title="列表视图"
           >☰</button>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 12px', position: 'relative' }}
+        onContextMenu={event => {
+          const target = event.target as HTMLElement;
+          if (target.closest('.tool-card') || target.closest('.tool-row') || target.closest('.context-menu')) return;
+          event.preventDefault();
+          setAreaMenu({ x: event.clientX, y: event.clientY });
+        }}
+      >
         {filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🔧</div>
@@ -276,7 +284,7 @@ export default function MainContent() {
             ) : (
               <>
                 <h3>暂无工具</h3>
-                <p>点击右上角&quot;添加工具&quot;来添加你的第一个工具</p>
+                <p>在空白区域右键添加你的第一个工具</p>
               </>
             )}
           </div>
@@ -284,7 +292,7 @@ export default function MainContent() {
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: cardSize === 'small' ? 12 : cardSize === 'large' ? 20 : 16,
+            gap: cardSize === 'small' ? 6 : cardSize === 'large' ? 10 : 8,
           }}>
             {filtered.map(tool => (
               <ToolCard
@@ -307,6 +315,25 @@ export default function MainContent() {
             ))}
           </div>
         )}
+
+        {areaMenu && (
+          <div
+            className="context-menu glass"
+            ref={contextMenuRef}
+            style={{ left: areaMenu.x, top: areaMenu.y }}
+            onClick={event => event.stopPropagation()}
+          >
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                setAreaMenu(null);
+                onAddTool(defaultToolCategoryId);
+              }}
+            >
+              <span>＋</span> 添加工具
+            </div>
+          </div>
+        )}
       </div>
 
       {editingTool !== undefined && (
@@ -315,6 +342,232 @@ export default function MainContent() {
           onClose={() => setEditingTool(undefined)}
         />
       )}
+    </div>
+  );
+}
+
+export function TopCategoryBar() {
+  const { data, selectedCategoryId, selectCategory, saveCategorySilent, deleteCategory } = useApp();
+  const [editingTopCategory, setEditingTopCategory] = useState<Category | null>(null);
+  const [showTopCategoryModal, setShowTopCategoryModal] = useState(false);
+  const [topCategoryMenu, setTopCategoryMenu] = useState<{ x: number; y: number } | null>(null);
+  const [topCategoryContextMenu, setTopCategoryContextMenu] = useState<{ x: number; y: number; category: Category } | null>(null);
+  const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: { distance: 4 },
+  }));
+
+  const topCategories = useMemo(() => (
+    data?.categories
+      .filter(category => !category.parentId && category.id !== 'all')
+      .sort((a, b) => a.order - b.order) ?? []
+  ), [data]);
+
+  const activeTopCategoryId = useMemo(() => {
+    if (!data || !selectedCategoryId) return null;
+    const selected = data.categories.find(category => category.id === selectedCategoryId);
+    if (!selected) return null;
+    return selected.parentId ?? selected.id;
+  }, [data, selectedCategoryId]);
+
+  useEffect(() => {
+    if (!topCategoryMenu && !topCategoryContextMenu) return undefined;
+
+    const close = (event: MouseEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setTopCategoryMenu(null);
+      setTopCategoryContextMenu(null);
+    };
+    window.addEventListener('mousedown', close);
+    return () => {
+      window.removeEventListener('mousedown', close);
+    };
+  }, [topCategoryContextMenu, topCategoryMenu]);
+
+  if (!data) return null;
+
+  const scheduleHoverSelect = (categoryId: string) => {
+    if (!data.settings.hoverSwitchCategories) return;
+    selectCategory(categoryId);
+  };
+
+  const clearHoverSelect = () => {};
+
+  const reorderTopCategories = async (orderedTopCategories: Category[]) => {
+    const reordered = orderedTopCategories.map((category, index) => ({
+      ...category,
+      order: index + 1,
+    }));
+
+    for (const category of reordered) {
+      await saveCategorySilent(category);
+    }
+  };
+
+  const handleTopCategoryDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = topCategories.findIndex(category => category.id === active.id);
+    const newIndex = topCategories.findIndex(category => category.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    void reorderTopCategories(arrayMove(topCategories, oldIndex, newIndex));
+  };
+
+  return (
+    <>
+      <div
+        className="lily-top-strip"
+        onContextMenu={event => {
+          const target = event.target as HTMLElement;
+          if (target.closest('.lily-top-tab-wrap')) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setTopCategoryMenu({ x: event.clientX, y: event.clientY });
+        }}
+      >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopCategoryDragEnd}>
+          <div className="lily-top-strip-tabs">
+            <SortableContext items={topCategories.map(category => category.id)} strategy={horizontalListSortingStrategy}>
+              {topCategories.map(category => (
+                <SortableTopCategoryTab
+                  key={category.id}
+                  category={category}
+                  active={activeTopCategoryId === category.id}
+                  onSelect={() => selectCategory(category.id)}
+                  onHoverSelect={() => scheduleHoverSelect(category.id)}
+                  onHoverEnd={clearHoverSelect}
+                  onContextMenu={(event, targetCategory) => {
+                    setTopCategoryContextMenu({
+                      x: event.clientX,
+                      y: event.clientY,
+                      category: targetCategory,
+                    });
+                  }}
+                />
+              ))}
+            </SortableContext>
+          </div>
+        </DndContext>
+      </div>
+
+      {topCategoryMenu && (
+        <div
+          className="context-menu glass"
+          ref={contextMenuRef}
+          style={{ left: topCategoryMenu.x, top: topCategoryMenu.y }}
+          onClick={event => event.stopPropagation()}
+        >
+          <div
+            className="context-menu-item"
+            onClick={() => {
+              setTopCategoryMenu(null);
+              setEditingTopCategory(null);
+              setShowTopCategoryModal(true);
+            }}
+          >
+            <span>＋</span> 添加大分类
+          </div>
+        </div>
+      )}
+
+      {topCategoryContextMenu && (
+        <div
+          className="context-menu glass"
+          ref={contextMenuRef}
+          style={{ left: topCategoryContextMenu.x, top: topCategoryContextMenu.y }}
+          onClick={event => event.stopPropagation()}
+        >
+          <div
+            className="context-menu-item"
+            onClick={() => {
+              setTopCategoryContextMenu(null);
+              setEditingTopCategory(topCategoryContextMenu.category);
+              setShowTopCategoryModal(true);
+            }}
+          >
+            <span>✏️</span> 编辑
+          </div>
+          <div className="context-menu-divider" />
+          <div
+            className="context-menu-item danger"
+            onClick={() => {
+              setTopCategoryContextMenu(null);
+              void deleteCategory(topCategoryContextMenu.category.id);
+            }}
+          >
+            <span>🗑️</span> 删除
+          </div>
+        </div>
+      )}
+
+      {showTopCategoryModal && (
+        <CategoryModal
+          category={editingTopCategory}
+          onClose={() => setShowTopCategoryModal(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function SortableTopCategoryTab({
+  category,
+  active,
+  onSelect,
+  onHoverSelect,
+  onHoverEnd,
+  onContextMenu,
+}: {
+  category: Category;
+  active: boolean;
+  onSelect: () => void;
+  onHoverSelect: () => void;
+  onHoverEnd: () => void;
+  onContextMenu: (event: React.MouseEvent, category: Category) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: category.id });
+  const [hover, setHover] = useState(false);
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`lily-top-tab-wrap${hover ? ' hovering' : ''}${isDragging ? ' dragging' : ''}`}
+      style={style}
+      onContextMenu={event => {
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu(event, category);
+      }}
+      onMouseEnter={() => {
+        setHover(true);
+        onHoverSelect();
+      }}
+      onMouseLeave={() => {
+        setHover(false);
+        onHoverEnd();
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <button
+        className={`top-category-tab lily-top-tab${active ? ' active' : ''}`}
+        onClick={onSelect}
+      >
+        {category.name}
+      </button>
     </div>
   );
 }
@@ -356,7 +609,7 @@ function ToolRow({ tool, onEdit, onLaunch }: { tool: Tool; onEdit: () => void; o
         }}>
           {tool.icon
             ? <img src={tool.icon} width={32} height={32} style={{ objectFit: 'contain' }} />
-            : <span style={{ fontSize: 20 }}>{TYPE_ICONS[tool.type] ?? '🔧'}</span>
+            : <span style={{ fontSize: 20 }}>{getToolFallbackIcon(tool)}</span>
           }
         </div>
 
@@ -412,13 +665,16 @@ function RowContextMenu({
   onShowInFinder: () => void;
   onDelete: () => void;
 }) {
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const handler = () => onClose();
-    window.addEventListener('click', handler);
-    window.addEventListener('contextmenu', handler);
+    const handler = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      onClose();
+    };
+    window.addEventListener('mousedown', handler);
     return () => {
-      window.removeEventListener('click', handler);
-      window.removeEventListener('contextmenu', handler);
+      window.removeEventListener('mousedown', handler);
     };
   }, [onClose]);
 
@@ -427,6 +683,7 @@ function RowContextMenu({
 
   return (
     <div
+      ref={menuRef}
       className="context-menu glass"
       style={{ left: x, top: adjustedY }}
       onClick={event => event.stopPropagation()}

@@ -20,25 +20,25 @@ body {
 
 /* Dark theme */
 body.dark {
-  --bg-primary: #3b3b3b;
-  --bg-secondary: #2f2f33;
-  --bg-tertiary: #444446;
-  --bg-card: #3f3f41;
-  --bg-card-hover: #4a4a4d;
-  --bg-modal: #f0f0f0;
-  --bg-input: #2a2a2d;
-  --text-primary: #f6f6f6;
-  --text-secondary: #d5d5d8;
-  --text-muted: #a0a0a8;
-  --border-color: #4a4a4d;
-  --accent-color: #626262;
-  --accent-hover: #737373;
+  --bg-primary: #1f2023;
+  --bg-secondary: #27292d;
+  --bg-tertiary: #32353b;
+  --bg-card: #2d3035;
+  --bg-card-hover: #383c43;
+  --bg-modal: #2b2e33;
+  --bg-input: #1f2227;
+  --text-primary: #f1f3f5;
+  --text-secondary: #c3c7ce;
+  --text-muted: #8f96a3;
+  --border-color: #3b4048;
+  --accent-color: #5b7cfa;
+  --accent-hover: #7390ff;
   --danger-color: #ff5252;
   --success-color: #66bb6a;
   --warning-color: #ffa726;
-  --shadow: 0 3px 12px rgba(0, 0, 0, 0.22);
-  --scrollbar-thumb: #5a5a5e;
-  --scrollbar-track: #343437;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+  --scrollbar-thumb: #4a505a;
+  --scrollbar-track: #24262a;
 }
 
 /* Light theme */
@@ -88,21 +88,36 @@ body.light {
   flex-shrink: 0;
 }
 
-.titlebar-brand {
+.titlebar-tools {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
 }
 
-.titlebar-name {
-  font-size: 16px;
-  font-weight: 700;
+.titlebar-search-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.titlebar-search-button:hover,
+.titlebar-search-button.active {
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
-.titlebar-subtitle {
-  font-size: 11px;
-  color: var(--text-muted);
+.titlebar-search-input {
+  width: 180px;
+  height: 28px;
+  font-size: 12px;
+  padding: 5px 10px;
 }
 
 .lily-titlebar-button {
@@ -282,7 +297,7 @@ textarea.input {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(10, 12, 16, 0.58);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -293,8 +308,8 @@ textarea.input {
 /* Modal */
 .modal {
   background: var(--bg-modal);
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
   width: 520px;
   max-width: 95vw;
   max-height: 85vh;
@@ -369,49 +384,73 @@ textarea.input {
 .tool-card {
   position: relative;
   display: flex;
+  flex-direction: column;
   border-radius: 0;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   overflow: hidden;
   cursor: pointer;
-  transition: background 0.12s ease;
+  box-shadow: none;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .tool-card:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.tool-card-accent {
-  width: 2px;
-  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .lily-tool-card-body {
   position: relative;
   width: 100%;
   height: 100%;
-  padding: 12px 8px 8px;
+  padding: 8px 6px 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
 }
 
+.lily-tool-main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+.lily-tool-card-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.lily-tool-card-badge.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .lily-tool-icon-wrap {
-  border-radius: 10px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-top: 4px;
   overflow: hidden;
   flex-shrink: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .lily-tool-name {
   width: 100%;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.25;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -422,25 +461,35 @@ textarea.input {
 .lily-tool-description {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: 3px;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
-.lily-launch-button {
-  margin-left: auto;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+.lily-tool-card-footer {
+  margin-top: auto;
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: #fff;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+
+.lily-tool-meta {
+  font-size: 9px;
+  color: color-mix(in srgb, var(--text-muted) 88%, white);
+  letter-spacing: 0.01em;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.lily-tool-meta.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .tool-row {
@@ -460,14 +509,14 @@ textarea.input {
 .sidebar-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 36px;
-  padding: 7px 10px;
-  border-radius: 0;
+  padding: 6px 2px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 13px;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.22s ease;
 }
 
 .sidebar-item:hover {
@@ -497,14 +546,17 @@ textarea.input {
   align-items: center;
   justify-content: center;
   min-width: 36px;
-  padding: 2px 8px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(44, 47, 56, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .top-category-tab,
@@ -512,11 +564,10 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 14px;
-  border-radius: 0;
-  border: 1px solid transparent;
-  border-bottom: none;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: none;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -534,13 +585,32 @@ textarea.input {
 .top-category-tab.active,
 .sub-category-tab.active {
   background: var(--bg-tertiary);
-  border-color: var(--border-color);
   color: #fff;
   font-weight: 600;
 }
 
 .lily-top-tab {
-  margin-bottom: -1px;
+  margin-bottom: 0;
+}
+
+.lily-top-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.lily-top-strip-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0;
 }
 
 .lily-sidebar-section-title {
@@ -549,6 +619,115 @@ textarea.input {
   color: var(--text-muted);
   padding: 8px 8px 4px;
   letter-spacing: 0.6px;
+}
+
+.lily-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 6px;
+}
+
+.lily-sidebar-add-button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.lily-sidebar-add-button:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.lily-top-tab-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  transition: transform 0.22s ease, opacity 0.16s ease;
+}
+
+.lily-top-tab-wrap.dragging,
+.sidebar-item.dragging {
+  opacity: 0.52;
+}
+
+.lily-top-tab-wrap.drop-active .top-category-tab,
+.sidebar-item.drop-active {
+  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-tertiary));
+}
+
+.lily-top-tab-add {
+  color: var(--text-muted);
+}
+
+.lily-top-tab-add:hover {
+  color: var(--text-primary);
+}
+
+.lily-toolbar-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.lily-toolbar-icon:hover,
+.lily-toolbar-icon.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.lily-toolbar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-modal);
+  box-shadow: var(--shadow);
+  z-index: 40;
+}
+
+.lily-toolbar-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+
+.lily-toolbar-menu-item:hover,
+.lily-toolbar-menu-item.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.lily-toolbar-search {
+  width: 180px;
+  height: 28px;
+  font-size: 12px;
+  padding: 5px 10px;
 }
 
 /* Context menu */

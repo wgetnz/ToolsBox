@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from './store/AppContext';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
-import MainContent from './components/MainContent';
+import MainContent, { TopCategoryBar } from './components/MainContent';
 import ToolModal from './components/ToolModal';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
@@ -10,6 +10,7 @@ import Toast from './components/Toast';
 export default function App() {
   const { data } = useApp();
   const [showAddTool, setShowAddTool] = useState(false);
+  const [addToolCategoryId, setAddToolCategoryId] = useState<string | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -31,6 +32,12 @@ export default function App() {
     return undefined;
   }, [data?.settings.theme, data?.settings.fontSize, data]);
 
+  useEffect(() => {
+    return window.launchbox.onOpenSettingsRequested(() => {
+      setShowSettings(true);
+    });
+  }, []);
+
   if (!data) {
     return (
       <div style={{
@@ -50,17 +57,29 @@ export default function App() {
 
   return (
     <>
-      <TitleBar
-        onAddTool={() => setShowAddTool(true)}
-        onOpenSettings={() => setShowSettings(true)}
-      />
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <Sidebar />
-        <MainContent />
+      <TitleBar />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TopCategoryBar />
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <Sidebar />
+          <MainContent
+            onAddTool={categoryId => {
+              setAddToolCategoryId(categoryId);
+              setShowAddTool(true);
+            }}
+          />
+        </div>
       </div>
 
       {showAddTool && (
-        <ToolModal tool={null} onClose={() => setShowAddTool(false)} />
+        <ToolModal
+          tool={null}
+          initialCategoryId={addToolCategoryId}
+          onClose={() => {
+            setShowAddTool(false);
+            setAddToolCategoryId(undefined);
+          }}
+        />
       )}
 
       {showSettings && (

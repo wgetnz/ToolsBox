@@ -1,23 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
+import { getToolFallbackIcon } from '../utils/toolIcons';
 
 const TYPE_LABELS: Record<string, string> = {
   jar: 'JAR',
   python: 'Python',
   shell: 'Shell',
-  executable: 'EXE',
+  executable: 'BIN',
   app: 'App',
   url: 'URL',
-};
-
-const TYPE_ICONS: Record<string, string> = {
-  jar: '☕',
-  python: '🐍',
-  shell: '💻',
-  executable: '⚡',
-  app: '📱',
-  url: '🌐',
 };
 
 interface Props {
@@ -28,23 +20,36 @@ interface Props {
 
 export default function ToolCard({ tool, size, onEdit }: Props) {
   const { launchTool, deleteTool, openInTerminal, showInFinder } = useApp();
-  const [hover, setHover] = useState(false);
-  const [launching, setLaunching] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const hoverTimerRef = useRef<number | null>(null);
 
   const dims = {
-    small: { width: 108, height: 96, iconSize: 26, nameFontSize: 11 },
-    medium: { width: 124, height: 108, iconSize: 32, nameFontSize: 12 },
-    large: { width: 144, height: 124, iconSize: 38, nameFontSize: 13 },
+    small: { width: 88, height: 84, iconSize: 24, nameFontSize: 11 },
+    medium: { width: 98, height: 92, iconSize: 28, nameFontSize: 12 },
+    large: { width: 112, height: 102, iconSize: 32, nameFontSize: 13 },
   }[size];
 
-  const handleLaunch = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (launching) return;
-    setLaunching(true);
+  const handleLaunch = async () => {
     await launchTool(tool.id);
-    setLaunching(false);
+  };
+
+  const handleMouseEnter = () => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+    hoverTimerRef.current = window.setTimeout(() => {
+      setShowDetails(true);
+    }, 1000);
+  };
+
+  const handleMouseLeave = () => {
+    setShowDetails(false);
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
   };
 
   return (
@@ -53,43 +58,41 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
         ref={cardRef}
         className="tool-card"
         style={{ width: dims.width, height: dims.height }}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onDoubleClick={handleLaunch}
         onContextMenu={event => {
           event.preventDefault();
           setContextMenu({ x: event.clientX, y: event.clientY });
         }}
       >
-        {tool.accentColor && (
-          <div className="tool-card-accent" style={{ background: tool.accentColor }} />
-        )}
-
         <div className="lily-tool-card-body">
-          <div style={{ position: 'absolute', top: 6, right: 6 }}>
+          <div className={`lily-tool-card-badge${showDetails ? ' visible' : ''}`}>
             <span className="type-badge">{TYPE_LABELS[tool.type]}</span>
           </div>
 
-          <div
-            className="lily-tool-icon-wrap"
-            style={{
-              width: dims.iconSize + 16,
-              height: dims.iconSize + 16,
-            }}
-          >
-            {tool.icon
-              ? <img src={tool.icon} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-              : <span style={{ fontSize: dims.iconSize }}>{TYPE_ICONS[tool.type] ?? '🔧'}</span>
-            }
-          </div>
+          <div className="lily-tool-main">
+            <div
+              className="lily-tool-icon-wrap"
+              style={{
+                width: dims.iconSize + 16,
+                height: dims.iconSize + 16,
+              }}
+            >
+              {tool.icon
+                ? <img src={tool.icon} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                : <span style={{ fontSize: dims.iconSize }}>{getToolFallbackIcon(tool)}</span>
+              }
+            </div>
 
-          <div
-            className="lily-tool-name"
-            style={{
-              fontSize: dims.nameFontSize,
-            }}
-          >
-            {tool.name}
+            <div
+              className="lily-tool-name"
+              style={{
+                fontSize: dims.nameFontSize,
+              }}
+            >
+              {tool.name}
+            </div>
           </div>
 
           {tool.description && size === 'large' && (
@@ -98,20 +101,10 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', width: '100%' }}>
-            {tool.useCount > 0 && (
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{tool.useCount}次</span>
-            )}
-            {hover && (
-              <button
-                className="lily-launch-button"
-                style={{ background: tool.accentColor || 'var(--accent-color)' }}
-                onClick={handleLaunch}
-                title="启动"
-              >
-                {launching ? '⏳' : '▶'}
-              </button>
-            )}
+          <div className="lily-tool-card-footer">
+            <div className={`lily-tool-meta${showDetails ? ' visible' : ''}`}>
+              {tool.useCount > 0 ? `${tool.useCount}次使用` : '双击启动'}
+            </div>
           </div>
         </div>
       </div>
@@ -161,13 +154,16 @@ function ContextMenu({
   onOpenTerminal: () => void;
   onShowInFinder: () => void;
 }) {
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+
   React.useEffect(() => {
-    const handler = () => onClose();
-    window.addEventListener('click', handler);
-    window.addEventListener('contextmenu', handler);
+    const handler = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      onClose();
+    };
+    window.addEventListener('mousedown', handler);
     return () => {
-      window.removeEventListener('click', handler);
-      window.removeEventListener('contextmenu', handler);
+      window.removeEventListener('mousedown', handler);
     };
   }, [onClose]);
 
@@ -176,6 +172,7 @@ function ContextMenu({
 
   return (
     <div
+      ref={menuRef}
       className="context-menu glass"
       style={{ left: x, top: adjustedY }}
       onClick={event => event.stopPropagation()}

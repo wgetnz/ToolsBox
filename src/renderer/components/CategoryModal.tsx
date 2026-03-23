@@ -10,21 +10,22 @@ const ICONS = [
 
 interface Props {
   category?: Category | null;
+  initialParentId?: string;
   onClose: () => void;
 }
 
-export default function CategoryModal({ category, onClose }: Props) {
+export default function CategoryModal({ category, initialParentId, onClose }: Props) {
   const { data, saveCategory, deleteCategory } = useApp();
   const [name, setName] = useState(category?.name ?? '');
   const [icon, setIcon] = useState(category?.icon ?? '📦');
-  const [parentId, setParentId] = useState<string>(category?.parentId ?? '');
+  const [parentId, setParentId] = useState<string>(category?.parentId ?? initialParentId ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(category?.name ?? '');
     setIcon(category?.icon ?? '📦');
-    setParentId(category?.parentId ?? '');
-  }, [category]);
+    setParentId(category?.parentId ?? initialParentId ?? '');
+  }, [category, initialParentId]);
 
   const topCategories = (data?.categories ?? []).filter(
     item => !item.parentId && item.id !== 'all' && item.id !== category?.id

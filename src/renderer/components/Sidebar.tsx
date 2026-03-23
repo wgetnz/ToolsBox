@@ -2,31 +2,88 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Category } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 import CategoryModal from './CategoryModal';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DraggableAttributes,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
+
+function getSidebarWidthBounds(viewportWidth: number) {
+  const min = Math.max(72, Math.min(140, Math.round(viewportWidth * 0.1)));
+  const max = Math.max(220, Math.min(520, Math.round(viewportWidth * 0.38)));
+  return { min, max };
+}
+
+function getDefaultSidebarWidth(viewportWidth: number) {
+  const { min, max } = getSidebarWidthBounds(viewportWidth);
+  return Math.max(min, Math.min(max, Math.round(viewportWidth * 0.18)));
+}
+
+function clampSidebarWidth(width: number, viewportWidth: number) {
+  const { min, max } = getSidebarWidthBounds(viewportWidth);
+  return Math.max(min, Math.min(max, Math.round(width)));
+}
 
 export default function Sidebar() {
-  const { data, selectedCategoryId, selectCategory, searchQuery, setSearch, saveSettingsSilent } = useApp();
+  const { data, selectedCategoryId, selectCategory, saveSettingsSilent, saveCategorySilent, deleteCategory } = useApp();
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [width, setWidth] = useState<number>(() => data?.settings.sidebarWidth ?? 220);
+  const [sidebarMenu, setSidebarMenu] = useState<{ x: number; y: number } | null>(null);
+  const [categoryContextMenu, setCategoryContextMenu] = useState<{ x: number; y: number; category: Category } | null>(null);
+  const sidebarMenuRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState<number>(() => {
+    const viewportWidth = typeof window === 'undefined' ? 1200 : window.innerWidth;
+    return clampSidebarWidth(data?.settings.sidebarWidth ?? getDefaultSidebarWidth(viewportWidth), viewportWidth);
+  });
   const resizingRef = useRef(false);
   const startXRef = useRef(0);
-  const startWidthRef = useRef(220);
-  const hoverTimerRef = useRef<number | null>(null);
+  const startWidthRef = useRef(width);
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: { distance: 4 },
+  }));
 
   const categories = data?.categories;
-  const tools = data?.tools ?? [];
   const settings = data?.settings;
 
   useEffect(() => {
     if (!data) return;
-    setWidth(data.settings.sidebarWidth);
+    setWidth(clampSidebarWidth(data.settings.sidebarWidth, window.innerWidth));
   }, [data]);
 
-  useEffect(() => () => {
-    if (hoverTimerRef.current) {
-      window.clearTimeout(hoverTimerRef.current);
-    }
+  useEffect(() => {
+    const handleResize = () => {
+      setWidth(current => clampSidebarWidth(current, window.innerWidth));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!sidebarMenu && !categoryContextMenu) return undefined;
+
+    const close = (event: MouseEvent) => {
+      if (sidebarMenuRef.current?.contains(event.target as Node)) return;
+      setSidebarMenu(null);
+      setCategoryContextMenu(null);
+    };
+    window.addEventListener('mousedown', close);
+    return () => {
+      window.removeEventListener('mousedown', close);
+    };
+  }, [categoryContextMenu, sidebarMenu]);
 
   const categoryChildren = useMemo(() => {
     const childrenMap = new Map<string, Category[]>();
@@ -42,31 +99,23 @@ export default function Sidebar() {
     return childrenMap;
   }, [categories]);
 
-  const getCount = (categoryId: string) => {
-    if (categoryId === 'all') return tools.length;
-    const descendantIds = new Set([categoryId]);
-    const queue = [categoryId];
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      for (const child of categoryChildren.get(currentId) ?? []) {
-        if (!descendantIds.has(child.id)) {
-          descendantIds.add(child.id);
-          queue.push(child.id);
-        }
-      }
-    }
-    return tools.filter(tool => descendantIds.has(tool.categoryId)).length;
-  };
+  const activeTopCategoryId = useMemo(() => (
+    selectedCategoryId
+      ? (categories?.find(category => category.id === selectedCategoryId)?.parentId ?? selectedCategoryId)
+      : null
+  ), [categories, selectedCategoryId]);
 
-  const activeTopCategoryId = selectedCategoryId === 'all'
-    ? null
-    : (categories?.find(category => category.id === selectedCategoryId)?.parentId ?? selectedCategoryId);
-  const activeTopCategory = activeTopCategoryId
-    ? categories?.find(category => category.id === activeTopCategoryId) ?? null
-    : null;
-  const activeSubCategories = activeTopCategoryId
-    ? (categoryChildren.get(activeTopCategoryId) ?? [])
-    : [];
+  const activeTopCategory = useMemo(() => (
+    activeTopCategoryId
+      ? categories?.find(category => category.id === activeTopCategoryId) ?? null
+      : null
+  ), [activeTopCategoryId, categories]);
+
+  const activeSubCategories = useMemo(() => (
+    activeTopCategoryId
+      ? (categoryChildren.get(activeTopCategoryId) ?? [])
+      : []
+  ), [activeTopCategoryId, categoryChildren]);
 
   const startResize = useCallback((event: React.MouseEvent) => {
     if (!settings) return;
@@ -77,13 +126,13 @@ export default function Sidebar() {
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       if (!resizingRef.current) return;
-      const nextWidth = Math.max(180, Math.min(360, startWidthRef.current + moveEvent.clientX - startXRef.current));
+      const nextWidth = clampSidebarWidth(startWidthRef.current + moveEvent.clientX - startXRef.current, window.innerWidth);
       setWidth(nextWidth);
     };
 
     const onMouseUp = (upEvent: MouseEvent) => {
       resizingRef.current = false;
-      const nextWidth = Math.max(180, Math.min(360, startWidthRef.current + upEvent.clientX - startXRef.current));
+      const nextWidth = clampSidebarWidth(startWidthRef.current + upEvent.clientX - startXRef.current, window.innerWidth);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       void saveSettingsSilent({ ...settings, sidebarWidth: nextWidth });
@@ -95,18 +144,32 @@ export default function Sidebar() {
 
   const scheduleHoverSelect = useCallback((categoryId: string) => {
     if (!settings?.hoverSwitchCategories) return;
-    if (hoverTimerRef.current) window.clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = window.setTimeout(() => {
-      selectCategory(categoryId);
-    }, 120);
+    selectCategory(categoryId);
   }, [selectCategory, settings?.hoverSwitchCategories]);
 
-  const clearHoverSelect = useCallback(() => {
-    if (hoverTimerRef.current) {
-      window.clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
+  const clearHoverSelect = useCallback(() => {}, []);
+
+  const reorderSubCategories = useCallback(async (orderedSubCategories: Category[]) => {
+    if (!activeTopCategoryId) return;
+    const parentOrder = activeTopCategory?.order ?? 0;
+    for (const [index, category] of orderedSubCategories.entries()) {
+      await saveCategorySilent({
+        ...category,
+        order: parentOrder + index + 1,
+      });
     }
-  }, []);
+  }, [activeTopCategory?.order, activeTopCategoryId, saveCategorySilent]);
+
+  const handleSubCategoryDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = activeSubCategories.findIndex(category => category.id === active.id);
+    const newIndex = activeSubCategories.findIndex(category => category.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    void reorderSubCategories(arrayMove(activeSubCategories, oldIndex, newIndex));
+  };
 
   if (!data || !settings) return null;
 
@@ -120,51 +183,47 @@ export default function Sidebar() {
       flexShrink: 0,
       position: 'relative',
     }}>
-      <div style={{ padding: '12px 12px 8px' }}>
-        <div style={{ position: 'relative' }}>
-          <span style={{
-            position: 'absolute',
-            left: 10,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontSize: 13,
-            opacity: 0.5,
-          }}>🔍</span>
-          <input
-            className="input"
-            placeholder="搜索工具..."
-            value={searchQuery}
-            onChange={event => setSearch(event.target.value)}
-            style={{ paddingLeft: 30, fontSize: 13 }}
-          />
-        </div>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 10px' }}>
-        <div className="lily-sidebar-section-title">副分栏</div>
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '6px 2px' }}
+        onContextMenu={event => {
+          if (!activeTopCategory) return;
+          const target = event.target as HTMLElement;
+          if (target.closest('.sidebar-item')) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setSidebarMenu({ x: event.clientX, y: event.clientY });
+        }}
+      >
 
         {activeTopCategory && (
-          <>
-            <div className="lily-sidebar-section-title" style={{ marginTop: 10 }}>
-              {activeTopCategory.name}
-            </div>
-            {activeSubCategories.map(child => (
-              <CategoryItem
-                key={child.id}
-                category={child}
-                count={getCount(child.id)}
-                selected={selectedCategoryId === child.id}
-                onClick={() => selectCategory(child.id)}
-                onHover={() => scheduleHoverSelect(child.id)}
-                onHoverEnd={clearHoverSelect}
-                onEdit={() => {
-                  setEditingCategory(child);
-                  setShowCategoryModal(true);
-                }}
-                indent
-              />
-            ))}
-          </>
+          <div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSubCategoryDragEnd}>
+              <SortableContext items={activeSubCategories.map(category => category.id)} strategy={verticalListSortingStrategy}>
+                {activeSubCategories.map(child => (
+                  <SortableCategoryItem
+                    key={child.id}
+                    category={child}
+                    selected={selectedCategoryId === child.id}
+                    onClick={() => selectCategory(child.id)}
+                    onHover={() => scheduleHoverSelect(child.id)}
+                    onHoverEnd={clearHoverSelect}
+                    onEdit={() => {
+                      setEditingCategory(child);
+                      setShowCategoryModal(true);
+                    }}
+                    onContextMenu={(event, targetCategory) => {
+                      setCategoryContextMenu({
+                        x: event.clientX,
+                        y: event.clientY,
+                        category: targetCategory,
+                      });
+                    }}
+                    indent
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          </div>
         )}
 
         {!activeTopCategory && (
@@ -178,16 +237,55 @@ export default function Sidebar() {
           </div>
         )}
 
-        <button
-          className="btn btn-ghost"
-          style={{ width: '100%', justifyContent: 'center', marginTop: 4, fontSize: 12 }}
-          onClick={() => {
-            setEditingCategory(null);
-            setShowCategoryModal(true);
-          }}
-        >
-          + 添加分类
-        </button>
+        {sidebarMenu && activeTopCategory && (
+          <div
+            className="context-menu glass"
+            ref={sidebarMenuRef}
+            style={{ left: sidebarMenu.x, top: sidebarMenu.y }}
+            onClick={event => event.stopPropagation()}
+          >
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                setSidebarMenu(null);
+                setEditingCategory(null);
+                setShowCategoryModal(true);
+              }}
+            >
+              <span>＋</span> 添加小分类
+            </div>
+          </div>
+        )}
+
+        {categoryContextMenu && (
+          <div
+            className="context-menu glass"
+            ref={sidebarMenuRef}
+            style={{ left: categoryContextMenu.x, top: categoryContextMenu.y }}
+            onClick={event => event.stopPropagation()}
+          >
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                setCategoryContextMenu(null);
+                setEditingCategory(categoryContextMenu.category);
+                setShowCategoryModal(true);
+              }}
+            >
+              <span>✏️</span> 编辑
+            </div>
+            <div className="context-menu-divider" />
+            <div
+              className="context-menu-item danger"
+              onClick={() => {
+                setCategoryContextMenu(null);
+                void deleteCategory(categoryContextMenu.category.id);
+              }}
+            >
+              <span>🗑️</span> 删除
+            </div>
+          </div>
+        )}
 
       </div>
 
@@ -207,6 +305,7 @@ export default function Sidebar() {
       {showCategoryModal && (
         <CategoryModal
           category={editingCategory}
+          initialParentId={editingCategory ? undefined : activeTopCategory?.id}
           onClose={() => setShowCategoryModal(false)}
         />
       )}
@@ -215,67 +314,88 @@ export default function Sidebar() {
 }
 
 function CategoryItem({
+  setNodeRef,
+  listeners,
+  attributes,
   category,
-  count,
   selected,
   onClick,
   onHover,
   onHoverEnd,
-  onEdit,
+  onContextMenu,
+  dragging,
   indent = false,
   leadingControl,
 }: {
+  setNodeRef?: (node: HTMLDivElement | null) => void;
+  listeners?: SyntheticListenerMap;
+  attributes?: DraggableAttributes;
   category: Category;
-  count: number;
+  selected: boolean;
+  onClick: () => void;
+  onHover: () => void;
+  onHoverEnd: () => void;
+  onContextMenu?: (event: React.MouseEvent, category: Category) => void;
+  dragging?: boolean;
+  indent?: boolean;
+  leadingControl?: React.ReactNode;
+}) {
+  return (
+    <div
+      ref={setNodeRef}
+      className={`sidebar-item${selected ? ' active' : ''}${dragging ? ' dragging' : ''}`}
+      style={{ paddingLeft: indent ? 12 : 2, paddingRight: 2 }}
+      onClick={onClick}
+      onContextMenu={event => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onContextMenu(event, category);
+      }}
+      onMouseEnter={onHover}
+      onMouseLeave={() => {
+        onHoverEnd();
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      {leadingControl ?? null}
+      <span style={{ fontSize: 13 }}>{category.icon}</span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {category.name}
+      </span>
+    </div>
+  );
+}
+
+function SortableCategoryItem(props: {
+  category: Category;
   selected: boolean;
   onClick: () => void;
   onHover: () => void;
   onHoverEnd: () => void;
   onEdit?: () => void;
+  onContextMenu?: (event: React.MouseEvent, category: Category) => void;
   indent?: boolean;
-  leadingControl?: React.ReactNode;
 }) {
-  const [hover, setHover] = useState(false);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.category.id });
 
   return (
-    <div
-      className={`sidebar-item${selected ? ' active' : ''}`}
-      style={{ paddingLeft: indent ? 22 : 10 }}
-      onClick={onClick}
-      onMouseEnter={() => {
-        setHover(true);
-        onHover();
-      }}
-      onMouseLeave={() => {
-        setHover(false);
-        onHoverEnd();
-      }}
-    >
-      {leadingControl ?? <span style={{ width: 14, flexShrink: 0 }} />}
-      <span style={{ fontSize: 14 }}>{category.icon}</span>
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {category.name}
-      </span>
-      <span style={{
-        fontSize: 11,
-        opacity: 0.7,
-        background: selected ? 'rgba(255,255,255,0.2)' : 'var(--bg-tertiary)',
-        padding: '1px 6px',
-        borderRadius: 10,
-        minWidth: 20,
-        textAlign: 'center',
-        flexShrink: 0,
-      }}>{count}</span>
-      {onEdit && hover && !selected && (
-        <span
-          style={{ fontSize: 12, opacity: 0.6, marginLeft: 4 }}
-          onClick={event => {
-            event.stopPropagation();
-            onEdit();
-          }}
-          title="编辑分类"
-        >✏️</span>
-      )}
+    <div style={{ transform: CSS.Transform.toString(transform), transition }}>
+      <CategoryItem
+        {...props}
+        setNodeRef={setNodeRef}
+        attributes={attributes}
+        listeners={listeners}
+        dragging={isDragging}
+      />
     </div>
   );
 }

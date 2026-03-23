@@ -1,5 +1,5 @@
 {
-  "name": "launchbox",
+  "name": "toolbox",
   "version": "1.0.0",
   "description": "A tool launcher for security researchers and developers",
   "main": "dist/main/main/index.js",
@@ -54,12 +54,15 @@
     "webpack-cli": "^7.0.2"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "electron-store": "^11.0.2",
     "uuid": "^13.0.0"
   },
   "build": {
-    "appId": "com.launchbox.app",
-    "productName": "LaunchBox",
+    "appId": "com.toolbox.app",
+    "productName": "ToolBox",
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns"
