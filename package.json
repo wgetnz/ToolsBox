@@ -30,6 +30,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@eslint/js": "^9.39.1",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
@@ -63,6 +64,7 @@
   "build": {
     "appId": "com.toolbox.app",
     "productName": "ToolBox",
+    "afterSign": "scripts/notarize.cjs",
     "publish": [
       {
         "provider": "github",
@@ -72,7 +74,15 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "target": [
+        "zip",
+        "dmg"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
     },
     "linux": {
       "target": "AppImage",
