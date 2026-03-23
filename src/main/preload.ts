@@ -4,6 +4,7 @@ import { Tool, Category, AppSettings } from '../shared/types';
 const api = {
   getData: () => ipcRenderer.invoke('get-data'),
   saveTool: (tool: Tool) => ipcRenderer.invoke('save-tool', tool),
+  saveToolsOrder: (orderedTools: Array<Pick<Tool, 'id' | 'customOrder'>>) => ipcRenderer.invoke('save-tools-order', orderedTools),
   deleteTool: (toolId: string) => ipcRenderer.invoke('delete-tool', toolId),
   saveCategory: (category: Category) => ipcRenderer.invoke('save-category', category),
   deleteCategory: (categoryId: string) => ipcRenderer.invoke('delete-category', categoryId),

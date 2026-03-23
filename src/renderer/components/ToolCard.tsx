@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 import { getToolFallbackIcon } from '../utils/toolIcons';
+import type { DraggableAttributes } from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 
 const TYPE_LABELS: Record<string, string> = {
   jar: 'JAR',
@@ -16,9 +18,11 @@ interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
   onEdit: (tool: Tool) => void;
+  dragAttributes?: DraggableAttributes;
+  dragListeners?: SyntheticListenerMap;
 }
 
-export default function ToolCard({ tool, size, onEdit }: Props) {
+export default function ToolCard({ tool, size, onEdit, dragAttributes, dragListeners }: Props) {
   const { launchTool, deleteTool, openInTerminal, showInFinder } = useApp();
   const [showDetails, setShowDetails] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -65,6 +69,8 @@ export default function ToolCard({ tool, size, onEdit }: Props) {
           event.preventDefault();
           setContextMenu({ x: event.clientX, y: event.clientY });
         }}
+        {...dragAttributes}
+        {...dragListeners}
       >
         <div className="lily-tool-card-body">
           <div className={`lily-tool-card-badge${showDetails ? ' visible' : ''}`}>

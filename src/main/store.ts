@@ -115,6 +115,16 @@ export function isBuiltInCategoryId(categoryId: string): boolean {
   return builtInCategoryIds.has(categoryId);
 }
 
+export function createMinimalCategories(): Category[] {
+  return defaultCategories
+    .filter(category => category.id === 'all')
+    .map(category => ({ ...category }));
+}
+
+export function createBuiltInCategories(): Category[] {
+  return defaultCategories.map(category => ({ ...category }));
+}
+
 function backupCorruptedDataFile(dataPath: string): void {
   const backupPath = `${dataPath}.corrupt-${Date.now()}.bak`;
   fs.copyFileSync(dataPath, backupPath);
@@ -355,6 +365,7 @@ export function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Ca
           : tool.iconSource === 'default'
             ? 'default' as const
             : (normalizedType === 'app' && typeof tool.icon === 'string' && tool.icon.trim() ? 'default' as const : undefined),
+        customOrder: sortOrder,
         accentColor: typeof tool.accentColor === 'string' && tool.accentColor.trim()
           ? tool.accentColor
           : typeof (tool as Partial<{ color: string }>).color === 'string' && (tool as Partial<{ color: string }>).color?.trim()
@@ -430,7 +441,7 @@ export function createDefaultData(): AppData {
   return {
     ...defaultData,
     tools: [],
-    categories: defaultCategories.map(category => ({ ...category })),
+    categories: createBuiltInCategories(),
     settings: {
       ...defaultSettings,
       ai: { ...defaultAi },

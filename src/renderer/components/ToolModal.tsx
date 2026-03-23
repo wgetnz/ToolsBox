@@ -38,11 +38,14 @@ function emptyTool(initialCategoryId?: string): Partial<Tool> {
 }
 
 function inferType(filePath: string): ToolType {
-  if (filePath.endsWith('.app')) return 'app';
-  if (filePath.endsWith('.sh') || filePath.endsWith('.bash') || filePath.endsWith('.zsh')) return 'shell';
-  if (filePath.endsWith('.jar')) return 'jar';
-  if (filePath.endsWith('.py')) return 'python';
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return 'url';
+  const trimmedPath = filePath.trim();
+  const lowerPath = trimmedPath.toLowerCase();
+
+  if (lowerPath.startsWith('http://') || lowerPath.startsWith('https://')) return 'url';
+  if (lowerPath.endsWith('.app')) return 'app';
+  if (lowerPath.endsWith('.sh') || lowerPath.endsWith('.bash') || lowerPath.endsWith('.zsh')) return 'shell';
+  if (lowerPath.endsWith('.jar')) return 'jar';
+  if (lowerPath.endsWith('.py')) return 'python';
   return 'executable';
 }
 
@@ -132,39 +135,20 @@ export default function ToolModal({ tool, initialCategoryId, onClose }: Props) {
   if (!data || !settings) return null;
 
   const handleBrowse = async () => {
-    let filters: { name: string; extensions: string[] }[] | undefined;
-    switch (form.type) {
-      case 'jar':
-        filters = [{ name: 'JAR Files', extensions: ['jar'] }];
-        break;
-      case 'python':
-        filters = [{ name: 'Python Files', extensions: ['py'] }];
-        break;
-      case 'shell':
-        filters = [{ name: 'Shell Scripts', extensions: ['sh', 'bash', 'zsh'] }];
-        break;
-      case 'app':
-        filters = [{ name: 'Applications', extensions: ['app'] }];
-        break;
-      default:
-        filters = undefined;
-    }
-
-    const filePath = await selectFile(filters);
+    const filePath = await selectFile();
     if (filePath) {
       const filename = filePath.split('/').pop() ?? filePath;
       const inferredType = inferType(filePath);
       const nextName = form.name?.trim() ? form.name : filename.replace(/\.app$/, '').replace(/\.[^.]+$/, '');
-      const nextType = form.type === 'url' ? inferredType : form.type ?? inferredType;
       setResolvingIcon(true);
-      const icon = await resolveToolIcon(filePath, nextType);
+      const icon = await resolveToolIcon(filePath, inferredType);
       setResolvingIcon(false);
 
       setForm(current => ({
         ...current,
         path: filePath,
         name: current.name?.trim() ? current.name : nextName,
-        type: nextType,
+        type: inferredType,
         icon,
         iconSource: icon ? 'default' : undefined,
       }));
@@ -233,7 +217,7 @@ export default function ToolModal({ tool, initialCategoryId, onClose }: Props) {
     if (!form.path?.trim()) return;
     setSaving(true);
     let nextIcon = form.icon;
-    const inferredType = form.type ?? inferType(form.path);
+    const inferredType = inferType(form.path);
     let nextIconSource = form.iconSource;
     if ((nextIconSource !== 'custom') && inferredType === 'app') {
       nextIcon = await refreshDefaultIcon(form.path, inferredType);
@@ -308,6 +292,9 @@ export default function ToolModal({ tool, initialCategoryId, onClose }: Props) {
                   <span>{item.icon}</span> {item.label}
                 </button>
               ))}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+              选择文件或输入路径后会自动识别类型，当前以路径识别结果为准。
             </div>
           </div>
 

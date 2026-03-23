@@ -6,6 +6,7 @@ declare global {
     launchbox: {
       getData: () => Promise<AppData>;
       saveTool: (tool: Tool) => Promise<Tool[]>;
+      saveToolsOrder: (orderedTools: Array<Pick<Tool, 'id' | 'customOrder'>>) => Promise<Tool[]>;
       deleteTool: (toolId: string) => Promise<Tool[]>;
       saveCategory: (category: Category) => Promise<Category[]>;
       deleteCategory: (categoryId: string) => Promise<{ categories: Category[]; tools: Tool[] }>;
@@ -90,6 +91,8 @@ function reducer(state: AppState, action: Action): AppState {
 
 interface AppContextValue extends AppState {
   saveTool: (tool: Tool) => Promise<void>;
+  saveToolSilent: (tool: Tool) => Promise<void>;
+  saveToolsOrderSilent: (orderedTools: Array<Pick<Tool, 'id' | 'customOrder'>>) => Promise<void>;
   deleteTool: (toolId: string) => Promise<void>;
   saveCategory: (category: Category) => Promise<void>;
   saveCategorySilent: (category: Category) => Promise<void>;
@@ -159,6 +162,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_TOOLS', payload: tools });
     showToast('success', `工具 "${tool.name}" 已保存`);
   }, [showToast]);
+
+  const saveToolSilent = useCallback(async (tool: Tool) => {
+    const tools = await window.launchbox.saveTool(tool);
+    dispatch({ type: 'SET_TOOLS', payload: tools });
+  }, []);
+
+  const saveToolsOrderSilent = useCallback(async (orderedTools: Array<Pick<Tool, 'id' | 'customOrder'>>) => {
+    const tools = await window.launchbox.saveToolsOrder(orderedTools);
+    dispatch({ type: 'SET_TOOLS', payload: tools });
+  }, []);
 
   const deleteTool = useCallback(async (toolId: string) => {
     const tools = await window.launchbox.deleteTool(toolId);
@@ -321,6 +334,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       ...state,
       saveTool,
+      saveToolSilent,
+      saveToolsOrderSilent,
       deleteTool,
       saveCategory,
       saveCategorySilent,

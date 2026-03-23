@@ -17,11 +17,13 @@ import {
   SortableContext,
   arrayMove,
   horizontalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-type SortKey = 'name' | 'lastUsed' | 'useCount' | 'createdAt';
+type SortKey = 'customOrder' | 'name' | 'lastUsed' | 'useCount' | 'createdAt';
 
 interface Props {
   onAddTool: (categoryId?: string) => void;
@@ -55,16 +57,26 @@ export default function MainContent({ onAddTool }: Props) {
     viewMode,
     setViewMode,
     saveSettingsSilent,
+    saveToolsOrderSilent,
     launchTool,
   } = useApp();
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [areaMenu, setAreaMenu] = useState<{ x: number; y: number } | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortKey, setSortKey] = useState<SortKey>('customOrder');
   const [sortAsc, setSortAsc] = useState(true);
+  const [optimisticTools, setOptimisticTools] = useState<Tool[] | null>(null);
   const sortMenuRef = React.useRef<HTMLDivElement | null>(null);
   const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: { distance: 4 },
+  }));
   const handleSort = (key: SortKey) => {
+    if (key === 'customOrder') {
+      setSortKey('customOrder');
+      setSortAsc(true);
+      return;
+    }
     if (sortKey === key) {
       setSortAsc(current => !current);
     } else {
@@ -147,6 +159,9 @@ export default function MainContent({ onAddTool }: Props) {
     return [...tools].sort((a, b) => {
       let value = 0;
       switch (sortKey) {
+        case 'customOrder':
+          value = (a.customOrder ?? 0) - (b.customOrder ?? 0) || a.createdAt - b.createdAt;
+          break;
         case 'name':
           value = a.name.localeCompare(b.name, 'zh-CN');
           break;
@@ -163,6 +178,50 @@ export default function MainContent({ onAddTool }: Props) {
       return sortAsc ? value : -value;
     });
   }, [data, searchQuery, searchScope, selectedCategoryIds, sortAsc, sortKey]);
+
+  const canCustomSort = sortKey === 'customOrder' && !searchQuery.trim();
+
+  useEffect(() => {
+    if (!canCustomSort) {
+      setOptimisticTools(null);
+      return;
+    }
+
+    if (!optimisticTools) return;
+
+    const persistedSignature = filtered.map(tool => `${tool.id}:${tool.customOrder ?? 0}`).join('|');
+    const optimisticSignature = optimisticTools.map(tool => `${tool.id}:${tool.customOrder ?? 0}`).join('|');
+    if (persistedSignature === optimisticSignature) {
+      setOptimisticTools(null);
+    }
+  }, [canCustomSort, filtered, optimisticTools]);
+
+  const visibleTools = optimisticTools && canCustomSort ? optimisticTools : filtered;
+
+  const reorderTools = async (orderedTools: Tool[]) => {
+    await saveToolsOrderSilent(orderedTools.map((tool, index) => ({
+      id: tool.id,
+      customOrder: index,
+    })));
+  };
+
+  const handleToolDragEnd = (event: DragEndEvent) => {
+    if (!canCustomSort) return;
+
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filtered.findIndex(tool => tool.id === active.id);
+    const newIndex = filtered.findIndex(tool => tool.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(filtered, oldIndex, newIndex).map((tool, index) => ({
+      ...tool,
+      customOrder: index,
+    }));
+    setOptimisticTools(reordered);
+    void reorderTools(reordered);
+  };
 
   useEffect(() => {
     if (!showSortMenu) return undefined;
@@ -226,6 +285,7 @@ export default function MainContent({ onAddTool }: Props) {
           {showSortMenu && (
             <div className="lily-toolbar-menu">
               {([
+                ['customOrder', '自定义排序'],
                 ['name', '名称'],
                 ['lastUsed', '最近使用'],
                 ['useCount', '使用次数'],
@@ -237,7 +297,7 @@ export default function MainContent({ onAddTool }: Props) {
                   onClick={() => handleSort(key)}
                 >
                   <span>{label}</span>
-                  {sortKey === key && <span>{sortAsc ? '↑' : '↓'}</span>}
+                  {sortKey === key && key !== 'customOrder' && <span>{sortAsc ? '↑' : '↓'}</span>}
                 </button>
               ))}
             </div>
@@ -273,7 +333,7 @@ export default function MainContent({ onAddTool }: Props) {
           setAreaMenu({ x: event.clientX, y: event.clientY });
         }}
       >
-        {filtered.length === 0 ? (
+        {visibleTools.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">🔧</div>
             {searchQuery ? (
@@ -289,31 +349,41 @@ export default function MainContent({ onAddTool }: Props) {
             )}
           </div>
         ) : viewMode === 'grid' ? (
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: cardSize === 'small' ? 6 : cardSize === 'large' ? 10 : 8,
-          }}>
-            {filtered.map(tool => (
-              <ToolCard
-                key={tool.id}
-                tool={tool}
-                size={cardSize}
-                onEdit={item => setEditingTool(item)}
-              />
-            ))}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleToolDragEnd}>
+            <SortableContext items={visibleTools.map(tool => tool.id)} strategy={rectSortingStrategy}>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: cardSize === 'small' ? 6 : cardSize === 'large' ? 10 : 8,
+              }}>
+                {visibleTools.map(tool => (
+                  <SortableToolCard
+                    key={tool.id}
+                    tool={tool}
+                    size={cardSize}
+                    sortable={canCustomSort}
+                    onEdit={item => setEditingTool(item)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {filtered.map(tool => (
-              <ToolRow
-                key={tool.id}
-                tool={tool}
-                onEdit={() => setEditingTool(tool)}
-                onLaunch={() => launchTool(tool.id)}
-              />
-            ))}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleToolDragEnd}>
+            <SortableContext items={visibleTools.map(tool => tool.id)} strategy={verticalListSortingStrategy}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {visibleTools.map(tool => (
+                  <SortableToolRow
+                    key={tool.id}
+                    tool={tool}
+                    sortable={canCustomSort}
+                    onEdit={() => setEditingTool(tool)}
+                    onLaunch={() => launchTool(tool.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
 
         {areaMenu && (
@@ -568,6 +638,92 @@ function SortableTopCategoryTab({
       >
         {category.name}
       </button>
+    </div>
+  );
+}
+
+function SortableToolCard({
+  tool,
+  size,
+  sortable,
+  onEdit,
+}: {
+  tool: Tool;
+  size: 'small' | 'medium' | 'large';
+  sortable: boolean;
+  onEdit: (tool: Tool) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: tool.id,
+    disabled: !sortable,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={isDragging ? 'tool-sortable-dragging' : ''}
+    >
+      <ToolCard
+        tool={tool}
+        size={size}
+        onEdit={onEdit}
+        dragAttributes={sortable ? attributes : undefined}
+        dragListeners={sortable ? listeners : undefined}
+      />
+    </div>
+  );
+}
+
+function SortableToolRow({
+  tool,
+  sortable,
+  onEdit,
+  onLaunch,
+}: {
+  tool: Tool;
+  sortable: boolean;
+  onEdit: () => void;
+  onLaunch: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: tool.id,
+    disabled: !sortable,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={isDragging ? 'tool-sortable-dragging' : ''}
+      {...(sortable ? attributes : {})}
+      {...(sortable ? listeners : {})}
+    >
+      <ToolRow tool={tool} onEdit={onEdit} onLaunch={onLaunch} />
     </div>
   );
 }

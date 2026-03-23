@@ -399,6 +399,10 @@ textarea.input {
   border-color: rgba(255, 255, 255, 0.06);
 }
 
+.tool-sortable-dragging {
+  opacity: 0.52;
+}
+
 .lily-tool-card-body {
   position: relative;
   width: 100%;

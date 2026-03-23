@@ -24,7 +24,7 @@ import {
   ImportInstalledAppsResult,
   RestoreBackupResult,
 } from '../shared/types';
-import { loadData, saveData, createId, sanitizeSettings, createBackup, createDefaultData, sanitizeData, sanitizeCategories, isBuiltInCategoryId, getDefaultBackupDirectory } from './store';
+import { loadData, saveData, createId, sanitizeSettings, createBackup, createDefaultData, sanitizeData, sanitizeCategories, isBuiltInCategoryId, getDefaultBackupDirectory, createBuiltInCategories, createMinimalCategories } from './store';
 import { launchTool, openInTerminal, showInFinder } from './launcher';
 
 let mainWindow: BrowserWindow | null = null;
@@ -32,6 +32,7 @@ let tray: Tray | null = null;
 let appData: AppData;
 let backupTimer: NodeJS.Timeout | null = null;
 const APP_DISPLAY_NAME = 'ToolBox';
+const iconDataUrlCache = new Map<string, string | null>();
 const APP_IMPORT_ROOTS = [
   '/Applications',
   path.join(app.getPath('home'), 'Applications'),
@@ -278,6 +279,11 @@ function convertIcnsToDataUrl(iconPath: string): string | null {
 }
 
 function getSystemAppIconDataUrl(appPath: string): string | null {
+  const cacheKey = `system:${appPath}`;
+  if (iconDataUrlCache.has(cacheKey)) {
+    return iconDataUrlCache.get(cacheKey) ?? null;
+  }
+
   const tempPath = path.join(app.getPath('temp'), `launchbox-system-icon-${Date.now()}-${Math.random().toString(36).slice(2)}.png`);
   const swiftSource = `
 import AppKit
@@ -286,7 +292,7 @@ import Foundation
 let targetPath = CommandLine.arguments[1]
 let outputPath = CommandLine.arguments[2]
 let image = NSWorkspace.shared.icon(forFile: targetPath)
-image.size = NSSize(width: 1024, height: 1024)
+image.size = NSSize(width: 256, height: 256)
 
 guard let tiffData = image.tiffRepresentation,
       let bitmap = NSBitmapImageRep(data: tiffData),
@@ -303,30 +309,74 @@ try pngData.write(to: URL(fileURLWithPath: outputPath))
       stdio: 'ignore',
     });
     if (!fs.existsSync(tempPath)) return null;
-    return loadImageDataUrl(tempPath);
+    const dataUrl = loadImageDataUrl(tempPath, 256);
+    iconDataUrlCache.set(cacheKey, dataUrl);
+    return dataUrl;
   } catch {
+    iconDataUrlCache.set(cacheKey, null);
     return null;
   } finally {
     fs.rmSync(tempPath, { force: true });
   }
 }
 
-function getBundleIconDataUrl(filePath: string): string | null {
-  const systemIcon = getSystemAppIconDataUrl(filePath);
-  if (systemIcon) return systemIcon;
+function getFastBundleIconDataUrl(filePath: string): string | null {
+  const cacheKey = `bundle:${filePath}`;
+  if (iconDataUrlCache.has(cacheKey)) {
+    return iconDataUrlCache.get(cacheKey) ?? null;
+  }
 
   const iconPath = resolveBundleIconPath(filePath);
-  if (!iconPath) return null;
+  if (!iconPath) {
+    iconDataUrlCache.set(cacheKey, null);
+    return null;
+  }
 
   if (iconPath.endsWith('.icns')) {
     const converted = convertIcnsToDataUrl(iconPath);
-    if (converted) return converted;
+    if (converted) {
+      iconDataUrlCache.set(cacheKey, converted);
+      return converted;
+    }
   }
 
-  return loadImageDataUrl(iconPath);
+  const dataUrl = loadImageDataUrl(iconPath, 192);
+  iconDataUrlCache.set(cacheKey, dataUrl);
+  return dataUrl;
 }
 
-function loadImageDataUrl(filePath: string): string | null {
+function isIosStyleWrappedApp(appPath: string): boolean {
+  const bundleCandidates = resolveBundlePaths(appPath);
+
+  for (const bundle of bundleCandidates) {
+    if (bundle.bundlePath !== appPath) return true;
+
+    const plist = readPlistJson(bundle.plistPath);
+    const supportedPlatforms = plist?.CFBundleSupportedPlatforms;
+    if (
+      Array.isArray(supportedPlatforms)
+      && supportedPlatforms.some(platform => typeof platform === 'string' && platform === 'iPhoneOS')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getBundleIconDataUrl(filePath: string): string | null {
+  const systemIcon = getSystemAppIconDataUrl(filePath);
+  if (systemIcon) return systemIcon;
+  return getFastBundleIconDataUrl(filePath);
+}
+
+function getImportedAppIconDataUrl(filePath: string): string | null {
+  return isIosStyleWrappedApp(filePath)
+    ? getBundleIconDataUrl(filePath)
+    : getFastBundleIconDataUrl(filePath);
+}
+
+function loadImageDataUrl(filePath: string, maxSize = 256): string | null {
   if (!fs.existsSync(filePath)) return null;
 
   const extension = path.extname(filePath).toLowerCase();
@@ -360,6 +410,11 @@ function loadImageDataUrl(filePath: string): string | null {
     }
 
     try {
+      const image = nativeImage.createFromPath(sourcePath);
+      if (!image.isEmpty()) {
+        return image.resize({ width: maxSize, height: maxSize }).toDataURL();
+      }
+
       const fileBuffer = fs.readFileSync(sourcePath);
       return `data:${mimeTypes[extension]};base64,${fileBuffer.toString('base64')}`;
     } finally {
@@ -372,7 +427,7 @@ function loadImageDataUrl(filePath: string): string | null {
   const image = nativeImage.createFromPath(filePath);
   if (image.isEmpty()) return null;
 
-  return image.resize({ width: 256, height: 256 }).toDataURL();
+  return image.resize({ width: maxSize, height: maxSize }).toDataURL();
 }
 
 async function getSafeFileIcon(filePath: string): Promise<string | null> {
@@ -729,6 +784,10 @@ function dedupeCategories(): void {
     .map((category, index) => ({ ...category, order: index }));
 }
 
+function ensureBuiltInCategories(): void {
+  appData.categories = sanitizeCategories(createBuiltInCategories());
+}
+
 async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
   logAiImport('开始导入已安装 App', {
     forceOverwrite: appData.settings.ai.forceOverwrite,
@@ -744,8 +803,12 @@ async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
     }
 
     appData.tools = [];
-    appData.categories = sanitizeCategories(undefined);
-    logAiImport('已清空现有工具并重置分类');
+    appData.categories = appData.settings.ai.enabled
+      ? createMinimalCategories()
+      : sanitizeCategories(createBuiltInCategories());
+    logAiImport('已清空现有工具并重置分类', {
+      mode: appData.settings.ai.enabled ? 'ai-empty' : 'built-in-default',
+    });
   }
 
   const existingPaths = new Set(appData.tools.map(tool => safeRealpath(tool.path)));
@@ -772,7 +835,6 @@ async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
         path: realPath,
         bundleId: getBundleString(plist, 'CFBundleIdentifier'),
         categoryType: getBundleString(plist, 'LSApplicationCategoryType'),
-        icon: getBundleIconDataUrl(realPath) ?? undefined,
         fallbackCategoryId: resolveImportedAppCategory(realPath, plist),
       });
     }
@@ -826,6 +888,7 @@ async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
             && candidate.name === appName
           );
           if (!matchedApp) continue;
+          const icon = getImportedAppIconDataUrl(matchedApp.path) ?? undefined;
 
           appData.tools.push({
             id: createId(),
@@ -836,8 +899,8 @@ async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
             args: '',
             workingDirectory: path.dirname(matchedApp.path),
             categoryId: childCategory.id,
-            icon: matchedApp.icon,
-            iconSource: matchedApp.icon ? 'default' : undefined,
+            icon,
+            iconSource: icon ? 'default' : undefined,
             useCount: 0,
             createdAt: Date.now(),
           });
@@ -849,10 +912,15 @@ async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
     }
   } else {
     logAiImport('未获得 AI 分类结果，回退到默认规则导入');
+    if (appData.settings.ai.forceOverwrite && appData.settings.ai.enabled) {
+      ensureBuiltInCategories();
+      logAiImport('AI 覆盖导入未得到结果，已补回默认分类用于规则导入');
+    }
   }
 
   for (const appItem of importedCandidates) {
     if (assignedAppPaths.has(appItem.path) || existingPaths.has(appItem.path)) continue;
+    const icon = getImportedAppIconDataUrl(appItem.path) ?? undefined;
 
     appData.tools.push({
       id: createId(),
@@ -863,8 +931,8 @@ async function importInstalledApps(): Promise<ImportInstalledAppsResult> {
       args: '',
       workingDirectory: path.dirname(appItem.path),
       categoryId: appItem.fallbackCategoryId,
-      icon: appItem.icon,
-      iconSource: appItem.icon ? 'default' : undefined,
+      icon,
+      iconSource: icon ? 'default' : undefined,
       useCount: 0,
       createdAt: Date.now(),
     });
@@ -1167,6 +1235,17 @@ function setupIPC(): void {
     return appData.tools;
   });
 
+  ipcMain.handle('save-tools-order', (_event, orderedTools: Array<Pick<Tool, 'id' | 'customOrder'>>) => {
+    const orderMap = new Map(orderedTools.map(tool => [tool.id, tool.customOrder]));
+    appData.tools = appData.tools.map(tool => (
+      orderMap.has(tool.id)
+        ? { ...tool, customOrder: orderMap.get(tool.id) }
+        : tool
+    ));
+    saveData(appData);
+    return appData.tools;
+  });
+
   ipcMain.handle('delete-tool', (_event, toolId: string) => {
     appData.tools = appData.tools.filter(tool => tool.id !== toolId);
     saveData(appData);
@@ -1373,11 +1452,97 @@ function setupIPC(): void {
   });
 }
 
+function createApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: APP_DISPLAY_NAME,
+      submenu: [
+        { label: `关于 ${APP_DISPLAY_NAME}`, role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { label: `隐藏 ${APP_DISPLAY_NAME}`, role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { label: `退出 ${APP_DISPLAY_NAME}`, role: 'quit' },
+      ],
+    },
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '设置',
+          click: () => {
+            mainWindow?.show();
+            mainWindow?.focus();
+            mainWindow?.webContents.send('open-settings');
+          },
+        },
+        { type: 'separator' },
+        { role: 'close', label: '关闭窗口' },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload', label: '重新加载' },
+        { role: 'forceReload', label: '强制重新加载' },
+        { role: 'toggleDevTools', label: '开发者工具' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '实际大小' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '切换全屏' },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        { role: 'zoom', label: '缩放' },
+        { type: 'separator' },
+        { role: 'front', label: '前置全部窗口' },
+      ],
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '显示主窗口',
+          click: () => {
+            mainWindow?.show();
+            mainWindow?.focus();
+          },
+        },
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
+  app.name = APP_DISPLAY_NAME;
   app.setName(APP_DISPLAY_NAME);
+  app.setAboutPanelOptions({ applicationName: APP_DISPLAY_NAME });
   appData = loadData();
   setupIPC();
   resetBackupScheduler();
+  createApplicationMenu();
   createWindow();
   createTray();
 

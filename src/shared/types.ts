@@ -59,6 +59,7 @@ export interface Tool {
   pythonEnvId?: string;
   icon?: string;
   iconSource?: 'default' | 'custom';
+  customOrder?: number;
   accentColor?: string;
   lastUsed?: number;
   useCount: number;
