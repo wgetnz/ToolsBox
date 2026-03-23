@@ -349,8 +349,9 @@ npm run pack         # 打包 macOS .app（ad-hoc 签名）
 - Lily → ToolsBox macOS 迁移主干（数据模型、启动逻辑、UI、CSS 设计系统）
 - 两级分类树（主分栏/副分栏双轴导航，对齐 Lily 结构）
 - 顶部主分栏 Tab 栏 + 侧边栏副分栏联动
+- 顶部主分栏 Tab 支持悬停切换（与侧边栏悬停行为一致，`hoverSwitchCategories` 控制）
+- 侧边栏移除最近使用区块（用户明确不需要）
 - 拖拽侧边栏宽度、网格/列表视图切换
-- 侧边栏悬停切换分类（`hoverSwitchCategories` 设置项控制）
 - 系统主题跟随（light/dark/system）
 - 拖放文件自动识别类型 + 提取 .app 图标
 - 参数解析升级（`parseArgs`，支持引号/转义）
@@ -361,9 +362,9 @@ npm run pack         # 打包 macOS .app（ad-hoc 签名）
 - CI 检查：`npm run lint`、`npm run typecheck`、`npm test`、`npm run build` 全部通过
 
 待处理（优先级从高到低）：
-1. 继续向 Lily 视觉语言收敛（右键菜单、编辑弹窗分栏、更多交互细节）
-2. `docs/ROADMAP.md` 中已规划但未完全落地的 Phase 1-5 后续能力
-3. Electron 原生交互的持续手工回归（托盘、窗口关闭行为、主题切换、文件拖放）
+1. `MainContent` 顶栏悬停 timer 缺少 `useEffect` cleanup（组件卸载时 timer 可能 fire，低风险）
+2. 继续向 Lily 视觉语言收敛（右键菜单、编辑弹窗分栏、更多交互细节）
+3. `docs/ROADMAP.md` 中已规划但未完全落地的 Phase 1-5 后续能力
 
 ---
 
