@@ -40,7 +40,7 @@ jobs:
         run: npm test
 
       - name: Build macOS package
-        run: npx electron-builder --mac zip dmg
+        run: npx electron-builder --mac zip dmg --publish never
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
