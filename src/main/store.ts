@@ -16,9 +16,11 @@ const defaultCategories: Category[] = [
 ];
 
 const defaultSettings: AppSettings = {
-  theme: 'dark',
+  theme: 'system',      // 默认跟随 macOS 系统主题
   fontSize: 'medium',
   cardSize: 'medium',
+  viewMode: 'grid',     // 默认网格视图
+  sidebarWidth: 220,    // 侧边栏默认宽度
   javaEnvs: [],
   pythonEnvs: [],
   startAtLogin: false,

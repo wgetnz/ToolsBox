@@ -15,19 +15,25 @@ export default function App() {
   // Apply theme and settings to document
   useEffect(() => {
     if (!data) return;
-    const { theme, fontSize, backgroundColor } = data.settings;
-
-    document.body.className = theme;
+    const { theme, fontSize } = data.settings;
 
     const fontSizeMap = { small: '12px', medium: '14px', large: '16px' };
     document.documentElement.style.fontSize = fontSizeMap[fontSize];
 
-    if (backgroundColor) {
-      document.documentElement.style.setProperty('--bg-primary', backgroundColor);
+    const applyTheme = (isDark: boolean) => {
+      document.body.className = isDark ? 'dark' : 'light';
+    };
+
+    if (theme === 'system') {
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(isDark);
+      // 监听主进程推送的系统主题变化
+      const cleanup = window.launchbox.onNativeThemeChanged(applyTheme);
+      return cleanup;
     } else {
-      document.documentElement.style.removeProperty('--bg-primary');
+      applyTheme(theme === 'dark');
     }
-  }, [data?.settings]);
+  }, [data?.settings.theme, data?.settings.fontSize]);
 
   if (!data) {
     return (

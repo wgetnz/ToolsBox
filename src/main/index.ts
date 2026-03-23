@@ -6,6 +6,7 @@ import {
   Tray,
   Menu,
   nativeImage,
+  nativeTheme,
 } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -30,7 +31,8 @@ function createWindow(): void {
     frame: false,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: '#1a1a2e',
+    vibrancy: 'under-window',        // macOS 磨砂玻璃效果
+    visualEffectState: 'active',     // 失焦时不变暗
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -69,9 +71,10 @@ function saveWindowBounds(): void {
 function createTray(): void {
   // Try to load icon from assets
   const iconPath = path.join(app.getAppPath(), 'assets', 'tray-icon.png');
-  const trayIcon = fs.existsSync(iconPath)
-    ? nativeImage.createFromPath(iconPath)
+  let trayIcon = fs.existsSync(iconPath)
+    ? nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
     : nativeImage.createEmpty();
+  trayIcon.setTemplateImage(true);  // macOS 菜单栏 template image（自动适配深/浅色）
 
   tray = new Tray(trayIcon);
   tray.setToolTip('LaunchBox');
@@ -134,15 +137,21 @@ function setupIPC(): void {
   });
 
   ipcMain.handle('save-category', (_event, category: Category) => {
-    // Don't allow editing built-in "all" category
-    if (!category.id || category.id === 'all') return appData.categories;
+    // 不允许编辑内置 'all' 分类
+    if (category.id === 'all') return appData.categories;
 
-    const idx = appData.categories.findIndex(c => c.id === category.id);
-    if (idx >= 0) {
-      appData.categories[idx] = category;
-    } else {
+    if (!category.id) {
+      // 新建分类
       category.id = createId();
       appData.categories.push(category);
+    } else {
+      // 更新已有分类
+      const idx = appData.categories.findIndex(c => c.id === category.id);
+      if (idx >= 0) {
+        appData.categories[idx] = category;
+      } else {
+        appData.categories.push(category);
+      }
     }
     saveData(appData);
     return appData.categories;
@@ -150,10 +159,18 @@ function setupIPC(): void {
 
   ipcMain.handle('delete-category', (_event, categoryId: string) => {
     if (categoryId === 'all') return appData.categories;
-    appData.categories = appData.categories.filter(c => c.id !== categoryId);
-    // Move tools from deleted category to 'misc'
+
+    // 同时删除所有子分类
+    const childIds = appData.categories
+      .filter(c => c.parentId === categoryId)
+      .map(c => c.id);
+    const toDelete = new Set([categoryId, ...childIds]);
+
+    appData.categories = appData.categories.filter(c => !toDelete.has(c.id));
+
+    // 将被删分类下的工具移至 misc
     appData.tools = appData.tools.map(t =>
-      t.categoryId === categoryId ? { ...t, categoryId: 'misc' } : t
+      toDelete.has(t.categoryId) ? { ...t, categoryId: 'misc' } : t
     );
     saveData(appData);
     return { categories: appData.categories, tools: appData.tools };
@@ -228,6 +245,21 @@ function setupIPC(): void {
         }
         break;
     }
+  });
+
+  // 提取文件图标（.app、可执行文件等），返回 base64 data URL
+  ipcMain.handle('get-file-icon', async (_event, filePath: string) => {
+    try {
+      const icon = await app.getFileIcon(filePath, { size: 'large' });
+      return icon.toDataURL();
+    } catch {
+      return null;
+    }
+  });
+
+  // 系统主题变化时推送到渲染进程
+  nativeTheme.on('updated', () => {
+    mainWindow?.webContents.send('native-theme-changed', nativeTheme.shouldUseDarkColors);
   });
 }
 

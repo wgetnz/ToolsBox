@@ -16,6 +16,8 @@ declare global {
       openInTerminal: (dirPath: string) => Promise<void>;
       showInFinder: (filePath: string) => Promise<void>;
       windowControl: (action: 'minimize' | 'maximize' | 'close') => Promise<void>;
+      getFileIcon: (filePath: string) => Promise<string | null>;
+      onNativeThemeChanged: (cb: (isDark: boolean) => void) => () => void;
     };
   }
 }
@@ -31,6 +33,7 @@ interface AppState {
   loading: boolean;
   selectedCategoryId: string;
   searchQuery: string;
+  viewMode: 'grid' | 'list';
   toasts: Toast[];
 }
 
@@ -42,6 +45,7 @@ type Action =
   | { type: 'SET_SETTINGS'; payload: AppSettings }
   | { type: 'SELECT_CATEGORY'; payload: string }
   | { type: 'SET_SEARCH'; payload: string }
+  | { type: 'SET_VIEW_MODE'; payload: 'grid' | 'list' }
   | { type: 'ADD_TOAST'; payload: Toast }
   | { type: 'REMOVE_TOAST'; payload: string };
 
@@ -61,6 +65,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, selectedCategoryId: action.payload };
     case 'SET_SEARCH':
       return { ...state, searchQuery: action.payload };
+    case 'SET_VIEW_MODE':
+      return { ...state, viewMode: action.payload };
     case 'ADD_TOAST':
       return { ...state, toasts: [...state.toasts, action.payload] };
     case 'REMOVE_TOAST':
@@ -76,6 +82,7 @@ interface AppContextValue extends AppState {
   saveCategory: (category: Category) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
+  saveSettingsSilent: (settings: AppSettings) => Promise<void>;
   launchTool: (toolId: string) => Promise<void>;
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
   selectDirectory: () => Promise<string | null>;
@@ -84,6 +91,7 @@ interface AppContextValue extends AppState {
   windowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   selectCategory: (id: string) => void;
   setSearch: (q: string) => void;
+  setViewMode: (mode: 'grid' | 'list') => void;
   showToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -97,12 +105,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loading: true,
     selectedCategoryId: 'all',
     searchQuery: '',
+    viewMode: 'grid',
     toasts: [],
   });
 
   useEffect(() => {
     window.launchbox.getData().then(data => {
       dispatch({ type: 'SET_DATA', payload: data });
+      // 从持久化设置恢复 viewMode
+      if (data.settings.viewMode) {
+        dispatch({ type: 'SET_VIEW_MODE', payload: data.settings.viewMode });
+      }
     });
   }, []);
 
@@ -144,6 +157,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     showToast('success', '设置已保存');
   }, [showToast]);
 
+  // 静默保存（不弹 Toast），用于侧边栏宽度、视图切换等频繁触发的场景
+  const saveSettingsSilent = useCallback(async (settings: AppSettings) => {
+    const saved = await window.launchbox.saveSettings(settings);
+    dispatch({ type: 'SET_SETTINGS', payload: saved });
+  }, []);
+
   const launchTool = useCallback(async (toolId: string) => {
     const result = await window.launchbox.launchTool(toolId);
     if (result.success) {
@@ -178,6 +197,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_SEARCH', payload: q });
   }, []);
 
+  const setViewMode = useCallback((mode: 'grid' | 'list') => {
+    dispatch({ type: 'SET_VIEW_MODE', payload: mode });
+  }, []);
+
   return (
     <AppContext.Provider value={{
       ...state,
@@ -186,6 +209,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveCategory,
       deleteCategory,
       saveSettings,
+      saveSettingsSilent,
       launchTool,
       selectFile,
       selectDirectory,
@@ -194,6 +218,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       windowControl,
       selectCategory,
       setSearch,
+      setViewMode,
       showToast,
     }}>
       {children}

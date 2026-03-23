@@ -1,94 +1,89 @@
-import { spawn, exec } from 'child_process';
+// macOS 专用启动器
+import { spawn, execFile } from 'child_process';
 import * as path from 'path';
-import * as os from 'os';
 import { Tool, AppSettings } from '../shared/types';
 
-function getPlatform(): 'mac' | 'win' | 'linux' {
-  if (process.platform === 'darwin') return 'mac';
-  if (process.platform === 'win32') return 'win';
-  return 'linux';
-}
+function buildCommand(
+  tool: Tool,
+  settings: AppSettings
+): { cmd: string; args: string[]; opts: object } {
+  // workingDirectory 优先，其次取文件所在目录（app/url 类型不传 cwd）
+  const cwd = tool.workingDirectory
+    || (tool.path && !tool.path.startsWith('http') ? path.dirname(tool.path) : undefined);
 
-function buildCommand(tool: Tool, settings: AppSettings): { cmd: string; args: string[]; opts: object } {
-  const platform = getPlatform();
-  const extraArgs = tool.args ? tool.args.split(/\s+/).filter(Boolean) : [];
+  const extraArgs = tool.args
+    ? tool.args.split(/\s+/).filter(Boolean)
+    : [];
 
   switch (tool.type) {
+
+    // java -jar /path/to/tool.jar [args]
     case 'jar': {
       let javaPath = 'java';
       if (tool.javaEnvId) {
         const jenv = settings.javaEnvs.find(j => j.id === tool.javaEnvId);
-        if (jenv) {
-          javaPath = platform === 'win'
-            ? path.join(jenv.path, 'bin', 'java.exe')
-            : path.join(jenv.path, 'bin', 'java');
-        }
+        if (jenv) javaPath = path.join(jenv.path, 'bin', 'java');
       }
       return {
         cmd: javaPath,
         args: ['-jar', tool.path, ...extraArgs],
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
     }
 
+    // python3 /path/to/script.py [args]
     case 'python': {
       let pythonPath = 'python3';
       if (tool.pythonEnvId) {
         const penv = settings.pythonEnvs.find(p => p.id === tool.pythonEnvId);
-        if (penv) {
-          pythonPath = platform === 'win'
-            ? path.join(penv.path, 'python.exe')
-            : path.join(penv.path, 'bin', 'python3');
-        }
+        if (penv) pythonPath = path.join(penv.path, 'bin', 'python3');
       }
       return {
         cmd: pythonPath,
         args: [tool.path, ...extraArgs],
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
     }
 
+    // /bin/bash /path/to/script.sh [args]
     case 'shell': {
-      if (platform === 'win') {
-        return { cmd: 'cmd.exe', args: ['/c', tool.path, ...extraArgs], opts: {} };
-      }
       return {
         cmd: '/bin/bash',
         args: [tool.path, ...extraArgs],
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
     }
 
+    // open /path/to/App.app [--args arg1 arg2]
+    // 使用系统 open 命令，Gatekeeper 兼容；cwd 对 open 无意义
+    case 'app': {
+      const openArgs = extraArgs.length > 0
+        ? [tool.path, '--args', ...extraArgs]
+        : [tool.path];
+      return { cmd: 'open', args: openArgs, opts: {} };
+    }
+
+    // 直接执行 Unix binary
     case 'executable': {
       return {
         cmd: tool.path,
         args: extraArgs,
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
     }
 
-    case 'app': {
-      if (platform === 'mac') {
-        return { cmd: 'open', args: [tool.path, ...extraArgs], opts: {} };
-      }
-      return { cmd: tool.path, args: extraArgs, opts: {} };
-    }
-
-    case 'batch': {
-      if (platform === 'win') {
-        return { cmd: 'cmd.exe', args: ['/c', tool.path, ...extraArgs], opts: {} };
-      }
-      return { cmd: '/bin/bash', args: [tool.path, ...extraArgs], opts: {} };
-    }
-
+    // open "https://..." 或 "file:///path/to/file.html"
+    // 无协议头时自动补 https://
     case 'url': {
-      if (platform === 'mac') return { cmd: 'open', args: [tool.path], opts: {} };
-      if (platform === 'win') return { cmd: 'start', args: ['', tool.path], opts: { shell: true } };
-      return { cmd: 'xdg-open', args: [tool.path], opts: {} };
+      let url = tool.path;
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
+        url = 'https://' + url;
+      }
+      return { cmd: 'open', args: [url], opts: {} };
     }
 
     default:
-      throw new Error(`Unknown tool type: ${tool.type}`);
+      throw new Error(`Unsupported tool type on macOS: ${(tool as any).type}`);
   }
 }
 
@@ -96,7 +91,7 @@ export function launchTool(tool: Tool, settings: AppSettings): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
       const { cmd, args, opts } = buildCommand(tool, settings);
-      console.log(`Launching: ${cmd} ${args.join(' ')}`);
+      console.log(`[Launch] ${cmd} ${args.join(' ')}`);
 
       const proc = spawn(cmd, args, {
         detached: true,
@@ -104,6 +99,7 @@ export function launchTool(tool: Tool, settings: AppSettings): Promise<void> {
         ...(opts as object),
       });
 
+      proc.on('error', reject);
       proc.unref();
       resolve();
     } catch (err) {
@@ -112,28 +108,29 @@ export function launchTool(tool: Tool, settings: AppSettings): Promise<void> {
   });
 }
 
+// 用 AppleScript 在 Terminal.app 中打开指定目录
+// 通过 stdin 传脚本（而非 -e 拼接），路径以 AppleScript 字符串传递避免注入
 export function openInTerminal(dirPath: string): void {
-  const platform = getPlatform();
   const dir = path.isAbsolute(dirPath) ? dirPath : path.dirname(dirPath);
+  // AppleScript 字符串转义：\ → \\，" → \"
+  const escaped = dir.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const script = `
+set thePath to "${escaped}"
+tell application "Terminal" to activate
+tell application "Terminal"
+  if (count of windows) = 0 then
+    do script "cd " & quoted form of thePath
+  else
+    do script "cd " & quoted form of thePath in front window
+  end if
+end tell
+`.trim();
 
-  if (platform === 'mac') {
-    exec(`open -a Terminal "${dir}"`);
-  } else if (platform === 'win') {
-    exec(`start cmd.exe /k "cd /d "${dir}""`);
-  } else {
-    const terminals = ['gnome-terminal', 'xterm', 'konsole', 'xfce4-terminal'];
-    const term = terminals[0];
-    exec(`${term} --working-directory="${dir}"`);
-  }
+  const proc = spawn('osascript', ['-'], { stdio: ['pipe', 'ignore', 'ignore'] });
+  proc.stdin?.end(script, 'utf8');
 }
 
+// 在 Finder 中选中文件（等价于 Windows explorer /select）
 export function showInFinder(filePath: string): void {
-  const platform = getPlatform();
-  if (platform === 'mac') {
-    exec(`open -R "${filePath}"`);
-  } else if (platform === 'win') {
-    exec(`explorer /select,"${filePath}"`);
-  } else {
-    exec(`xdg-open "${path.dirname(filePath)}"`);
-  }
+  execFile('open', ['-R', filePath]);
 }

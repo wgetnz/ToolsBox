@@ -8,14 +8,13 @@ const TOOL_TYPES: { value: ToolType; label: string; icon: string }[] = [
   { value: 'shell', label: 'Shell 脚本', icon: '💻' },
   { value: 'executable', label: '可执行文件', icon: '⚡' },
   { value: 'app', label: 'macOS App', icon: '📱' },
-  { value: 'batch', label: 'Windows 批处理', icon: '📜' },
   { value: 'url', label: 'URL / 网页', icon: '🌐' },
 ];
 
-const CARD_COLORS = [
-  '#4f8ef7', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
-  '#1abc9c', '#3498db', '#e67e22', '#e91e63', '#00bcd4',
-  '#ff5722', '#607d8b', '#795548', '#ffeb3b', '#8bc34a',
+// macOS 系统色调色板
+const ACCENT_COLORS = [
+  '#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af2', '#ff375f',
+  '#64d2ff', '#ffd60a',
 ];
 
 interface Props {
@@ -30,17 +29,27 @@ function emptyTool(): Partial<Tool> {
     type: 'executable',
     path: '',
     args: '',
+    workingDirectory: '',
     categoryId: 'misc',
-    color: '#4f8ef7',
     useCount: 0,
     createdAt: Date.now(),
   };
 }
 
+function inferType(filePath: string): ToolType {
+  if (filePath.endsWith('.app')) return 'app';
+  if (filePath.endsWith('.sh') || filePath.endsWith('.bash') || filePath.endsWith('.zsh')) return 'shell';
+  if (filePath.endsWith('.jar')) return 'jar';
+  if (filePath.endsWith('.py')) return 'python';
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return 'url';
+  return 'executable';
+}
+
 export default function ToolModal({ tool, onClose }: Props) {
-  const { data, saveTool, selectFile } = useApp();
+  const { data, saveTool, selectFile, selectDirectory } = useApp();
   const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool());
   const [saving, setSaving] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
     setForm(tool ? { ...tool } : emptyTool());
@@ -49,45 +58,56 @@ export default function ToolModal({ tool, onClose }: Props) {
   if (!data) return null;
 
   const { categories, settings } = data;
-  const nonAllCategories = categories.filter(c => c.id !== 'all');
+  // 只显示叶子分类（子分类或无子分类的顶级分类），用于关联工具
+  const leafCategories = categories.filter(c => c.id !== 'all');
 
   const update = (field: keyof Tool, value: unknown) =>
     setForm(f => ({ ...f, [field]: value }));
 
   const handleBrowse = async () => {
     let filters: { name: string; extensions: string[] }[] | undefined;
-
     switch (form.type) {
-      case 'jar':
-        filters = [{ name: 'JAR Files', extensions: ['jar'] }];
-        break;
-      case 'python':
-        filters = [{ name: 'Python Files', extensions: ['py'] }];
-        break;
-      case 'shell':
-        filters = [{ name: 'Shell Scripts', extensions: ['sh', 'bash', 'zsh'] }];
-        break;
-      case 'app':
-        filters = [{ name: 'Applications', extensions: ['app'] }];
-        break;
-      case 'batch':
-        filters = [{ name: 'Batch Files', extensions: ['bat', 'cmd'] }];
-        break;
-      default:
-        filters = undefined;
+      case 'jar': filters = [{ name: 'JAR Files', extensions: ['jar'] }]; break;
+      case 'python': filters = [{ name: 'Python Files', extensions: ['py'] }]; break;
+      case 'shell': filters = [{ name: 'Shell Scripts', extensions: ['sh', 'bash', 'zsh'] }]; break;
+      case 'app': filters = [{ name: 'Applications', extensions: ['app'] }]; break;
+      default: filters = undefined;
     }
-
-    const path = await selectFile(filters);
-    if (path) {
-      update('path', path);
-      // Auto-fill name from filename if empty
+    const p = await selectFile(filters);
+    if (p) {
+      update('path', p);
       if (!form.name) {
-        const parts = path.split('/');
+        const parts = p.split('/');
         const filename = parts[parts.length - 1];
-        const name = filename.replace(/\.[^.]+$/, '');
-        update('name', name);
+        update('name', filename.replace(/\.[^.]+$/, ''));
       }
     }
+  };
+
+  const handleBrowseDir = async () => {
+    const dir = await selectDirectory();
+    if (dir) update('workingDirectory', dir);
+  };
+
+  // 拖入 .app 或其他文件时自动填充
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const filePath = (e.dataTransfer.files[0] as any)?.path;
+    if (!filePath) return;
+
+    const parts = filePath.split('/');
+    const filename = parts[parts.length - 1];
+    const name = filename.replace(/\.app$/, '').replace(/\.[^.]+$/, '');
+    const type = inferType(filePath);
+
+    let icon: string | undefined;
+    try {
+      const result = await window.launchbox.getFileIcon(filePath);
+      icon = result ?? undefined;
+    } catch { /* 忽略提取失败 */ }
+
+    setForm(f => ({ ...f, name, path: filePath, type, icon }));
   };
 
   const handleSave = async () => {
@@ -100,17 +120,42 @@ export default function ToolModal({ tool, onClose }: Props) {
   };
 
   const isEditing = !!tool?.id;
+  const showWorkingDir = form.type !== 'url' && form.type !== 'app';
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+    <div
+      className="overlay"
+      onClick={onClose}
+      onDrop={handleDrop}
+      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+    >
+      <div
+        className="modal"
+        style={{
+          width: 560,
+          outline: dragOver ? '2px dashed var(--accent-color)' : 'none',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="modal-header">
           <span className="modal-title">{isEditing ? '编辑工具' : '添加工具'}</span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-body">
-          {/* Tool type selector */}
+          {dragOver && (
+            <div style={{
+              textAlign: 'center',
+              color: 'var(--accent-color)',
+              fontSize: 13,
+              padding: '8px 0',
+            }}>
+              拖入 .app 或其他文件自动填充
+            </div>
+          )}
+
+          {/* 工具类型 */}
           <div className="form-group">
             <label className="form-label">工具类型</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -131,6 +176,7 @@ export default function ToolModal({ tool, onClose }: Props) {
                     alignItems: 'center',
                     gap: 5,
                     transition: 'all 0.1s',
+                    fontFamily: 'inherit',
                   }}
                 >
                   <span>{t.icon}</span> {t.label}
@@ -139,7 +185,7 @@ export default function ToolModal({ tool, onClose }: Props) {
             </div>
           </div>
 
-          {/* Name & Color */}
+          {/* 名称 + 颜色标签 */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
             <div className="form-group">
               <label className="form-label">工具名称 *</label>
@@ -151,22 +197,31 @@ export default function ToolModal({ tool, onClose }: Props) {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">颜色</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 180 }}>
-                {CARD_COLORS.map(c => (
+              <label className="form-label">颜色标签</label>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {/* 无色 */}
+                <div
+                  onClick={() => update('accentColor', undefined)}
+                  title="无颜色"
+                  style={{
+                    width: 20, height: 20, borderRadius: '50%',
+                    border: '1.5px solid var(--border-color)',
+                    cursor: 'pointer',
+                    outline: !form.accentColor ? '2px solid var(--accent-color)' : 'none',
+                    outlineOffset: 2,
+                  }}
+                />
+                {ACCENT_COLORS.map(c => (
                   <div
                     key={c}
-                    onClick={() => update('color', c)}
+                    onClick={() => update('accentColor', c)}
                     style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: 5,
-                      background: c,
-                      cursor: 'pointer',
-                      outline: form.color === c ? `2px solid ${c}` : 'none',
+                      width: 20, height: 20, borderRadius: '50%',
+                      background: c, cursor: 'pointer',
+                      outline: form.accentColor === c ? '2px solid var(--accent-color)' : 'none',
                       outlineOffset: 2,
                       transition: 'transform 0.1s',
-                      transform: form.color === c ? 'scale(1.2)' : 'scale(1)',
+                      transform: form.accentColor === c ? 'scale(1.2)' : 'scale(1)',
                     }}
                   />
                 ))}
@@ -174,7 +229,7 @@ export default function ToolModal({ tool, onClose }: Props) {
             </div>
           </div>
 
-          {/* Description */}
+          {/* 描述 */}
           <div className="form-group">
             <label className="form-label">描述</label>
             <input
@@ -185,7 +240,7 @@ export default function ToolModal({ tool, onClose }: Props) {
             />
           </div>
 
-          {/* Path */}
+          {/* 路径 */}
           <div className="form-group">
             <label className="form-label">
               {form.type === 'url' ? 'URL 地址 *' : '文件路径 *'}
@@ -199,25 +254,40 @@ export default function ToolModal({ tool, onClose }: Props) {
                 style={{ flex: 1 }}
               />
               {form.type !== 'url' && (
-                <button className="btn btn-secondary" onClick={handleBrowse}>
-                  浏览
-                </button>
+                <button className="btn btn-secondary" onClick={handleBrowse}>浏览</button>
               )}
             </div>
           </div>
 
-          {/* Args */}
+          {/* 工作目录（app/url 类型隐藏）*/}
+          {showWorkingDir && (
+            <div className="form-group">
+              <label className="form-label">工作目录</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="input"
+                  value={form.workingDirectory ?? ''}
+                  onChange={e => update('workingDirectory', e.target.value || undefined)}
+                  placeholder="留空则使用文件所在目录"
+                  style={{ flex: 1 }}
+                />
+                <button className="btn btn-secondary" onClick={handleBrowseDir}>选择</button>
+              </div>
+            </div>
+          )}
+
+          {/* 启动参数 */}
           <div className="form-group">
             <label className="form-label">启动参数</label>
             <input
               className="input"
               value={form.args}
               onChange={e => update('args', e.target.value)}
-              placeholder="例: -Xmx2g -jar / --port 8080"
+              placeholder="例: -Xmx2g / --port 8080"
             />
           </div>
 
-          {/* Category */}
+          {/* 分类 + 环境选择 */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="form-group">
               <label className="form-label">分类</label>
@@ -226,13 +296,12 @@ export default function ToolModal({ tool, onClose }: Props) {
                 value={form.categoryId}
                 onChange={e => update('categoryId', e.target.value)}
               >
-                {nonAllCategories.map(c => (
+                {leafCategories.map(c => (
                   <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Java env selector */}
             {form.type === 'jar' && settings.javaEnvs.length > 0 && (
               <div className="form-group">
                 <label className="form-label">Java 环境</label>
@@ -249,7 +318,6 @@ export default function ToolModal({ tool, onClose }: Props) {
               </div>
             )}
 
-            {/* Python env selector */}
             {form.type === 'python' && settings.pythonEnvs.length > 0 && (
               <div className="form-group">
                 <label className="form-label">Python 环境</label>

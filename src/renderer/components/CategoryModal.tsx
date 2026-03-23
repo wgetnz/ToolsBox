@@ -14,15 +14,22 @@ interface Props {
 }
 
 export default function CategoryModal({ category, onClose }: Props) {
-  const { saveCategory, deleteCategory } = useApp();
+  const { data, saveCategory, deleteCategory } = useApp();
   const [name, setName] = useState(category?.name ?? '');
   const [icon, setIcon] = useState(category?.icon ?? '📦');
+  const [parentId, setParentId] = useState<string>(category?.parentId ?? '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(category?.name ?? '');
     setIcon(category?.icon ?? '📦');
+    setParentId(category?.parentId ?? '');
   }, [category]);
+
+  // 顶级分类（可作为父分类的选项，排除自身）
+  const topCategories = (data?.categories ?? []).filter(
+    c => !c.parentId && c.id !== 'all' && c.id !== category?.id
+  );
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -32,6 +39,7 @@ export default function CategoryModal({ category, onClose }: Props) {
       name: name.trim(),
       icon,
       order: category?.order ?? 99,
+      parentId: parentId || undefined,
     });
     setSaving(false);
     onClose();
@@ -92,6 +100,21 @@ export default function CategoryModal({ category, onClose }: Props) {
               placeholder="输入分类名称"
               autoFocus
             />
+          </div>
+
+          {/* 父分类选择（空 = 顶级分类）*/}
+          <div className="form-group">
+            <label className="form-label">父分类（可选）</label>
+            <select
+              className="input"
+              value={parentId}
+              onChange={e => setParentId(e.target.value)}
+            >
+              <option value="">— 顶级分类 —</option>
+              {topCategories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Preview */}

@@ -10,9 +10,11 @@ export default function SettingsPanel({ onClose }: Props) {
   const { data, saveSettings, selectDirectory } = useApp();
   const [form, setForm] = useState<AppSettings>(
     data?.settings ?? {
-      theme: 'dark',
+      theme: 'system',
       fontSize: 'medium',
       cardSize: 'medium',
+      viewMode: 'grid',
+      sidebarWidth: 220,
       javaEnvs: [],
       pythonEnvs: [],
       startAtLogin: false,
@@ -119,7 +121,11 @@ export default function SettingsPanel({ onClose }: Props) {
                 <div className="form-group">
                   <label className="form-label">主题</label>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    {(['dark', 'light'] as const).map(t => (
+                    {([
+                      ['system', '🖥 跟随系统', '#555'],
+                      ['dark', '🌙 深色', '#1c1c1e'],
+                      ['light', '☀️ 浅色', '#f2f2f7'],
+                    ] as const).map(([t, label, bg]) => (
                       <button
                         key={t}
                         onClick={() => update('theme', t)}
@@ -128,16 +134,37 @@ export default function SettingsPanel({ onClose }: Props) {
                           padding: '12px',
                           borderRadius: 10,
                           border: `2px solid ${form.theme === t ? 'var(--accent-color)' : 'var(--border-color)'}`,
-                          background: t === 'dark' ? '#1a1a2e' : '#f5f6fa',
-                          color: t === 'dark' ? '#e8eaf6' : '#1a1a2e',
+                          background: t === 'system' ? 'var(--bg-tertiary)' : bg,
+                          color: t === 'dark' ? '#fff' : t === 'system' ? 'var(--text-primary)' : '#1c1c1e',
                           cursor: 'pointer',
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: form.theme === t ? 600 : 400,
+                          fontFamily: 'inherit',
                         }}
                       >
-                        {t === 'dark' ? '🌙 暗色主题' : '☀️ 亮色主题'}
+                        {label}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">默认视图</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => update('viewMode', 'grid')}
+                      className={`btn ${form.viewMode === 'grid' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1 }}
+                    >
+                      ⊞ 网格
+                    </button>
+                    <button
+                      onClick={() => update('viewMode', 'list')}
+                      className={`btn ${form.viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1 }}
+                    >
+                      ☰ 列表
+                    </button>
                   </div>
                 </div>
 
@@ -170,40 +197,6 @@ export default function SettingsPanel({ onClose }: Props) {
                         {s === 'small' ? '紧凑' : s === 'medium' ? '标准' : '宽松'}
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">自定义背景色</label>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={form.backgroundColor ?? '#1a1a2e'}
-                      onChange={e => update('backgroundColor', e.target.value)}
-                      style={{
-                        width: 44,
-                        height: 36,
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        background: 'none',
-                        padding: 2,
-                      }}
-                    />
-                    <input
-                      className="input"
-                      value={form.backgroundColor ?? ''}
-                      onChange={e => update('backgroundColor', e.target.value)}
-                      placeholder="留空使用主题默认色"
-                      style={{ flex: 1 }}
-                    />
-                    {form.backgroundColor && (
-                      <button
-                        className="btn btn-secondary btn-icon"
-                        onClick={() => update('backgroundColor', undefined)}
-                        title="重置"
-                      >✕</button>
-                    )}
                   </div>
                 </div>
               </div>
