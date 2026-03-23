@@ -10,14 +10,14 @@ export default function SettingsPanel({ onClose }: Props) {
   const { data, saveSettings, selectDirectory } = useApp();
   const [form, setForm] = useState<AppSettings>(
     data?.settings ?? {
-      theme: 'dark',
+      theme: 'system',
       fontSize: 'medium',
       cardSize: 'medium',
+      viewMode: 'grid',
+      sidebarWidth: 220,
+      hoverSwitchCategories: true,
       javaEnvs: [],
       pythonEnvs: [],
-      hoverSwitchCategories: true,
-      showRecentTools: true,
-      enableGlobalQuickLauncher: true,
       startAtLogin: false,
       minimizeToTray: true,
     }
@@ -26,7 +26,7 @@ export default function SettingsPanel({ onClose }: Props) {
   const [saving, setSaving] = useState(false);
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
-    setForm(f => ({ ...f, [key]: value }));
+    setForm(current => ({ ...current, [key]: value }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -36,32 +36,18 @@ export default function SettingsPanel({ onClose }: Props) {
   };
 
   const addJavaEnv = async () => {
-    const path = await selectDirectory();
-    if (!path) return;
-    const name = path.split('/').pop() ?? 'Java';
-    const id = Date.now().toString();
-    update('javaEnvs', [...form.javaEnvs, { id, name, path }]);
+    const dirPath = await selectDirectory();
+    if (!dirPath) return;
+    const name = dirPath.split('/').pop() ?? 'Java';
+    update('javaEnvs', [...form.javaEnvs, { id: Date.now().toString(), name, path: dirPath }]);
   };
-
-  const removeJavaEnv = (id: string) =>
-    update('javaEnvs', form.javaEnvs.filter(j => j.id !== id));
-
-  const updateJavaName = (id: string, name: string) =>
-    update('javaEnvs', form.javaEnvs.map(j => j.id === id ? { ...j, name } : j));
 
   const addPythonEnv = async () => {
-    const path = await selectDirectory();
-    if (!path) return;
-    const name = path.split('/').pop() ?? 'Python';
-    const id = Date.now().toString();
-    update('pythonEnvs', [...form.pythonEnvs, { id, name, path }]);
+    const dirPath = await selectDirectory();
+    if (!dirPath) return;
+    const name = dirPath.split('/').pop() ?? 'Python';
+    update('pythonEnvs', [...form.pythonEnvs, { id: Date.now().toString(), name, path: dirPath }]);
   };
-
-  const removePythonEnv = (id: string) =>
-    update('pythonEnvs', form.pythonEnvs.filter(p => p.id !== id));
-
-  const updatePythonName = (id: string, name: string) =>
-    update('pythonEnvs', form.pythonEnvs.map(p => p.id === id ? { ...p, name } : p));
 
   const tabs = [
     { id: 'appearance', label: '外观', icon: '🎨' },
@@ -72,14 +58,13 @@ export default function SettingsPanel({ onClose }: Props) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 600, height: 500 }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ width: 600, height: 500 }} onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title">⚙️ 设置</span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
         </div>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* Tabs */}
           <div style={{
             width: 140,
             background: 'var(--bg-secondary)',
@@ -115,114 +100,97 @@ export default function SettingsPanel({ onClose }: Props) {
             ))}
           </div>
 
-          {/* Content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
             {activeTab === 'appearance' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div className="form-group">
                   <label className="form-label">主题</label>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    {(['dark', 'light'] as const).map(t => (
+                    {([
+                      ['system', '🖥 跟随系统', '#555'],
+                      ['dark', '🌙 深色', '#1c1c1e'],
+                      ['light', '☀️ 浅色', '#f2f2f7'],
+                    ] as const).map(([theme, label, background]) => (
                       <button
-                        key={t}
-                        onClick={() => update('theme', t)}
+                        key={theme}
+                        onClick={() => update('theme', theme)}
                         style={{
                           flex: 1,
                           padding: '12px',
                           borderRadius: 10,
-                          border: `2px solid ${form.theme === t ? 'var(--accent-color)' : 'var(--border-color)'}`,
-                          background: t === 'dark' ? '#1a1a2e' : '#f5f6fa',
-                          color: t === 'dark' ? '#e8eaf6' : '#1a1a2e',
+                          border: `2px solid ${form.theme === theme ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                          background: theme === 'system' ? 'var(--bg-tertiary)' : background,
+                          color: theme === 'dark' ? '#fff' : theme === 'system' ? 'var(--text-primary)' : '#1c1c1e',
                           cursor: 'pointer',
-                          fontSize: 13,
-                          fontWeight: form.theme === t ? 600 : 400,
+                          fontSize: 12,
+                          fontWeight: form.theme === theme ? 600 : 400,
+                          fontFamily: 'inherit',
                         }}
                       >
-                        {t === 'dark' ? '🌙 暗色主题' : '☀️ 亮色主题'}
+                        {label}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">默认视图</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => update('viewMode', 'grid')}
+                      className={`btn ${form.viewMode === 'grid' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1 }}
+                    >
+                      ⊞ 网格
+                    </button>
+                    <button
+                      onClick={() => update('viewMode', 'list')}
+                      className={`btn ${form.viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1 }}
+                    >
+                      ☰ 列表
+                    </button>
                   </div>
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">字体大小</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {(['small', 'medium', 'large'] as const).map(s => (
+                    {(['small', 'medium', 'large'] as const).map(size => (
                       <button
-                        key={s}
-                        onClick={() => update('fontSize', s)}
-                        className={`btn ${form.fontSize === s ? 'btn-primary' : 'btn-secondary'}`}
+                        key={size}
+                        onClick={() => update('fontSize', size)}
+                        className={`btn ${form.fontSize === size ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ flex: 1 }}
                       >
-                        {s === 'small' ? '小' : s === 'medium' ? '中' : '大'}
+                        {size === 'small' ? '小' : size === 'medium' ? '中' : '大'}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">显示密度</label>
+                  <label className="form-label">卡片大小</label>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {(['small', 'medium', 'large'] as const).map(s => (
+                    {(['small', 'medium', 'large'] as const).map(size => (
                       <button
-                        key={s}
-                        onClick={() => update('cardSize', s)}
-                        className={`btn ${form.cardSize === s ? 'btn-primary' : 'btn-secondary'}`}
+                        key={size}
+                        onClick={() => update('cardSize', size)}
+                        className={`btn ${form.cardSize === size ? 'btn-primary' : 'btn-secondary'}`}
                         style={{ flex: 1 }}
                       >
-                        {s === 'small' ? '小' : s === 'medium' ? '中' : '大'}
+                        {size === 'small' ? '紧凑' : size === 'medium' ? '标准' : '宽松'}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <ToggleItem
-                  label="分类悬停切换"
-                  description="鼠标移到分类时自动切换当前分类"
+                  label="悬停切换分类"
+                  description="鼠标移到侧边栏分类时自动切换当前分栏"
                   checked={form.hoverSwitchCategories}
-                  onChange={v => update('hoverSwitchCategories', v)}
+                  onChange={value => update('hoverSwitchCategories', value)}
                 />
-
-                <ToggleItem
-                  label="显示最近使用"
-                  description="在侧边栏展示最近使用过的工具列表"
-                  checked={form.showRecentTools}
-                  onChange={v => update('showRecentTools', v)}
-                />
-
-                <div className="form-group">
-                  <label className="form-label">自定义背景色</label>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={form.backgroundColor ?? '#1a1a2e'}
-                      onChange={e => update('backgroundColor', e.target.value)}
-                      style={{
-                        width: 44,
-                        height: 36,
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        background: 'none',
-                        padding: 2,
-                      }}
-                    />
-                    <input
-                      className="input"
-                      value={form.backgroundColor ?? ''}
-                      onChange={e => update('backgroundColor', e.target.value)}
-                      placeholder="留空使用主题默认色"
-                      style={{ flex: 1 }}
-                    />
-                    {form.backgroundColor && (
-                      <button
-                        className="btn btn-secondary btn-icon"
-                        onClick={() => update('backgroundColor', undefined)}
-                        title="重置"
-                      >✕</button>
-                    )}
-                  </div>
-                </div>
               </div>
             )}
 
@@ -235,8 +203,8 @@ export default function SettingsPanel({ onClose }: Props) {
                   <EnvItem
                     key={env.id}
                     env={env}
-                    onNameChange={name => updateJavaName(env.id, name)}
-                    onRemove={() => removeJavaEnv(env.id)}
+                    onNameChange={name => update('javaEnvs', form.javaEnvs.map(item => item.id === env.id ? { ...item, name } : item))}
+                    onRemove={() => update('javaEnvs', form.javaEnvs.filter(item => item.id !== env.id))}
                   />
                 ))}
                 <button className="btn btn-secondary" onClick={addJavaEnv} style={{ alignSelf: 'flex-start' }}>
@@ -254,8 +222,8 @@ export default function SettingsPanel({ onClose }: Props) {
                   <EnvItem
                     key={env.id}
                     env={env}
-                    onNameChange={name => updatePythonName(env.id, name)}
-                    onRemove={() => removePythonEnv(env.id)}
+                    onNameChange={name => update('pythonEnvs', form.pythonEnvs.map(item => item.id === env.id ? { ...item, name } : item))}
+                    onRemove={() => update('pythonEnvs', form.pythonEnvs.filter(item => item.id !== env.id))}
                   />
                 ))}
                 <button className="btn btn-secondary" onClick={addPythonEnv} style={{ alignSelf: 'flex-start' }}>
@@ -270,19 +238,13 @@ export default function SettingsPanel({ onClose }: Props) {
                   label="开机自启动"
                   description="登录时自动启动 LaunchBox"
                   checked={form.startAtLogin}
-                  onChange={v => update('startAtLogin', v)}
-                />
-                <ToggleItem
-                  label="全局唤起面板"
-                  description="使用 Cmd/Ctrl + Shift + K 在任意位置呼出快速启动器"
-                  checked={form.enableGlobalQuickLauncher}
-                  onChange={v => update('enableGlobalQuickLauncher', v)}
+                  onChange={value => update('startAtLogin', value)}
                 />
                 <ToggleItem
                   label="最小化到托盘"
                   description="关闭窗口时最小化到系统托盘而非退出"
                   checked={form.minimizeToTray}
-                  onChange={v => update('minimizeToTray', v)}
+                  onChange={value => update('minimizeToTray', value)}
                 />
               </div>
             )}
@@ -322,7 +284,7 @@ function EnvItem({
         <input
           className="input"
           value={env.name}
-          onChange={e => onNameChange(e.target.value)}
+          onChange={event => onNameChange(event.target.value)}
           placeholder="环境名称"
           style={{ flex: 1 }}
         />

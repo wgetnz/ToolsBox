@@ -1,7 +1,5 @@
 import { AppData, AppSettings, Category, Tool } from '../shared/types';
 import { v4 as uuidv4 } from 'uuid';
-
-// Use a simple JSON file store since electron-store ESM is tricky
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
@@ -16,14 +14,14 @@ const defaultCategories: Category[] = [
 ];
 
 const defaultSettings: AppSettings = {
-  theme: 'dark',
+  theme: 'system',
   fontSize: 'medium',
   cardSize: 'medium',
+  viewMode: 'grid',
+  sidebarWidth: 220,
+  hoverSwitchCategories: true,
   javaEnvs: [],
   pythonEnvs: [],
-  hoverSwitchCategories: true,
-  showRecentTools: true,
-  enableGlobalQuickLauncher: true,
   startAtLogin: false,
   minimizeToTray: true,
 };
@@ -34,14 +32,14 @@ const defaultData: AppData = {
   settings: defaultSettings,
 };
 
-const validThemes = new Set<AppSettings['theme']>(['dark', 'light']);
+const validThemes = new Set<AppSettings['theme']>(['light', 'dark', 'system']);
 const validFontSizes = new Set<AppSettings['fontSize']>(['small', 'medium', 'large']);
 const validCardSizes = new Set<AppSettings['cardSize']>(['small', 'medium', 'large']);
-const validToolTypes = new Set<Tool['type']>(['jar', 'python', 'shell', 'executable', 'app', 'batch', 'url']);
+const validViewModes = new Set<AppSettings['viewMode']>(['grid', 'list']);
+const validToolTypes = new Set<Tool['type']>(['jar', 'python', 'shell', 'executable', 'app', 'url']);
 
 function getDataPath(): string {
-  const userDataPath = app.getPath('userData');
-  return path.join(userDataPath, 'launchbox-data.json');
+  return path.join(app.getPath('userData'), 'launchbox-data.json');
 }
 
 function backupCorruptedDataFile(dataPath: string): void {
@@ -60,15 +58,13 @@ export function sanitizeSettings(settings: Partial<AppSettings> | undefined): Ap
   nextSettings.theme = validThemes.has(nextSettings.theme) ? nextSettings.theme : defaultSettings.theme;
   nextSettings.fontSize = validFontSizes.has(nextSettings.fontSize) ? nextSettings.fontSize : defaultSettings.fontSize;
   nextSettings.cardSize = validCardSizes.has(nextSettings.cardSize) ? nextSettings.cardSize : defaultSettings.cardSize;
+  nextSettings.viewMode = validViewModes.has(nextSettings.viewMode) ? nextSettings.viewMode : defaultSettings.viewMode;
+  nextSettings.sidebarWidth = typeof nextSettings.sidebarWidth === 'number'
+    ? Math.max(180, Math.min(360, Math.round(nextSettings.sidebarWidth)))
+    : defaultSettings.sidebarWidth;
   nextSettings.hoverSwitchCategories = typeof nextSettings.hoverSwitchCategories === 'boolean'
     ? nextSettings.hoverSwitchCategories
     : defaultSettings.hoverSwitchCategories;
-  nextSettings.showRecentTools = typeof nextSettings.showRecentTools === 'boolean'
-    ? nextSettings.showRecentTools
-    : defaultSettings.showRecentTools;
-  nextSettings.enableGlobalQuickLauncher = typeof nextSettings.enableGlobalQuickLauncher === 'boolean'
-    ? nextSettings.enableGlobalQuickLauncher
-    : defaultSettings.enableGlobalQuickLauncher;
   nextSettings.startAtLogin = typeof nextSettings.startAtLogin === 'boolean'
     ? nextSettings.startAtLogin
     : defaultSettings.startAtLogin;
@@ -129,13 +125,36 @@ export function sanitizeCategories(categories: Partial<Category>[] | undefined):
         name: typeof category.name === 'string' && category.name.trim() ? category.name : base.name,
         icon: typeof category.icon === 'string' && category.icon.trim() ? category.icon : base.icon,
         order: typeof category.order === 'number' ? category.order : base.order,
+        parentId: typeof category.parentId === 'string' && category.parentId.trim() ? category.parentId : undefined,
+        collapsed: typeof category.collapsed === 'boolean' ? category.collapsed : undefined,
       });
     }
   }
 
-  return Array.from(discovered.values())
+  const normalized = Array.from(discovered.values())
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'zh-CN'))
     .map((category, index) => ({ ...category, order: index }));
+
+  const topLevelIds = new Set(
+    normalized
+      .filter(category => !category.parentId)
+      .map(category => category.id)
+  );
+
+  return normalized.map(category => {
+    if (
+      category.parentId &&
+      category.parentId !== category.id &&
+      topLevelIds.has(category.parentId) &&
+      category.id !== 'all'
+    ) {
+      return category;
+    }
+
+    const nextCategory = { ...category };
+    delete nextCategory.parentId;
+    return nextCategory;
+  });
 }
 
 export function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Category[]): Tool[] {
@@ -160,6 +179,10 @@ export function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Ca
         ? tool.categoryId
         : 'misc';
 
+      const sortOrder = typeof (tool as Partial<{ customOrder: number }>).customOrder === 'number'
+        ? (tool as Partial<{ customOrder: number }>).customOrder ?? 0
+        : 0;
+
       return {
         id,
         name: tool.name!.trim(),
@@ -167,19 +190,29 @@ export function sanitizeTools(tools: Partial<Tool>[] | undefined, categories: Ca
         type: tool.type as Tool['type'],
         path: tool.path!.trim(),
         args: typeof tool.args === 'string' ? tool.args : '',
+        workingDirectory: typeof tool.workingDirectory === 'string' && tool.workingDirectory.trim()
+          ? tool.workingDirectory.trim()
+          : undefined,
         categoryId,
         javaEnvId: typeof tool.javaEnvId === 'string' ? tool.javaEnvId : undefined,
         pythonEnvId: typeof tool.pythonEnvId === 'string' ? tool.pythonEnvId : undefined,
         icon: typeof tool.icon === 'string' && tool.icon.trim() ? tool.icon : undefined,
-        color: typeof tool.color === 'string' && tool.color.trim() ? tool.color : undefined,
-        customOrder: typeof tool.customOrder === 'number' ? tool.customOrder : 0,
+        accentColor: typeof tool.accentColor === 'string' && tool.accentColor.trim()
+          ? tool.accentColor
+          : typeof (tool as Partial<{ color: string }>).color === 'string' && (tool as Partial<{ color: string }>).color?.trim()
+            ? (tool as Partial<{ color: string }>).color
+            : undefined,
         lastUsed: typeof tool.lastUsed === 'number' ? tool.lastUsed : undefined,
         useCount: typeof tool.useCount === 'number' && tool.useCount >= 0 ? tool.useCount : 0,
         createdAt: typeof tool.createdAt === 'number' ? tool.createdAt : Date.now(),
+        __sortOrder: sortOrder,
       };
     })
-    .sort((a, b) => a.customOrder - b.customOrder || a.createdAt - b.createdAt)
-    .map((tool, index) => ({ ...tool, customOrder: index }));
+    .sort((a, b) => a.__sortOrder - b.__sortOrder || a.createdAt - b.createdAt)
+    .map(({ __sortOrder, ...tool }) => {
+      void __sortOrder;
+      return tool;
+    });
 }
 
 export function sanitizeData(data: Partial<AppData>): AppData {
@@ -206,18 +239,22 @@ export function loadData(): AppData {
 
       return sanitized;
     }
-  } catch (e) {
-    console.error('Failed to load data:', e);
-    try {
-      if (fs.existsSync(dataPath)) {
+  } catch (error) {
+    console.error('Failed to load data:', error);
+    if (fs.existsSync(dataPath)) {
+      try {
         backupCorruptedDataFile(dataPath);
-        saveData({ ...defaultData, categories: [...defaultCategories] });
+      } catch (backupError) {
+        console.error('Failed to back up corrupted data file:', backupError);
       }
-    } catch (backupError) {
-      console.error('Failed to recover corrupted data file:', backupError);
     }
   }
-  return { ...defaultData, categories: [...defaultCategories] };
+
+  return {
+    ...defaultData,
+    categories: [...defaultCategories],
+    settings: { ...defaultSettings },
+  };
 }
 
 export function saveData(data: AppData): void {
@@ -225,8 +262,8 @@ export function saveData(data: AppData): void {
     const dataPath = getDataPath();
     fs.mkdirSync(path.dirname(dataPath), { recursive: true });
     fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Failed to save data:', e);
+  } catch (error) {
+    console.error('Failed to save data:', error);
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Tool, ToolType } from '../../shared/types';
 import { useApp } from '../store/AppContext';
 
@@ -8,58 +8,75 @@ const TOOL_TYPES: { value: ToolType; label: string; icon: string }[] = [
   { value: 'shell', label: 'Shell 脚本', icon: '💻' },
   { value: 'executable', label: '可执行文件', icon: '⚡' },
   { value: 'app', label: 'macOS App', icon: '📱' },
-  { value: 'batch', label: 'Windows 批处理', icon: '📜' },
   { value: 'url', label: 'URL / 网页', icon: '🌐' },
 ];
 
-const CARD_COLORS = [
-  '#4f8ef7', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
-  '#1abc9c', '#3498db', '#e67e22', '#e91e63', '#00bcd4',
-  '#ff5722', '#607d8b', '#795548', '#ffeb3b', '#8bc34a',
+const ACCENT_COLORS = [
+  '#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af2', '#ff375f',
+  '#64d2ff', '#ffd60a',
 ];
 
 interface Props {
   tool?: Tool | null;
-  initialValues?: Partial<Tool>;
   onClose: () => void;
 }
 
-function emptyTool(initialValues?: Partial<Tool>): Partial<Tool> {
+function emptyTool(): Partial<Tool> {
   return {
     name: '',
     description: '',
     type: 'executable',
     path: '',
     args: '',
+    workingDirectory: '',
     categoryId: 'misc',
-    color: '#4f8ef7',
-    customOrder: 0,
     useCount: 0,
     createdAt: Date.now(),
-    ...initialValues,
   };
 }
 
-export default function ToolModal({ tool, initialValues, onClose }: Props) {
-  const { data, saveTool, selectFile } = useApp();
-  const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool(initialValues));
+function inferType(filePath: string): ToolType {
+  if (filePath.endsWith('.app')) return 'app';
+  if (filePath.endsWith('.sh') || filePath.endsWith('.bash') || filePath.endsWith('.zsh')) return 'shell';
+  if (filePath.endsWith('.jar')) return 'jar';
+  if (filePath.endsWith('.py')) return 'python';
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return 'url';
+  return 'executable';
+}
+
+export default function ToolModal({ tool, onClose }: Props) {
+  const { data, saveTool, selectFile, selectDirectory } = useApp();
+  const [form, setForm] = useState<Partial<Tool>>(tool ? { ...tool } : emptyTool());
   const [saving, setSaving] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
-    setForm(tool ? { ...tool } : emptyTool(initialValues));
-  }, [tool, initialValues]);
+    setForm(tool ? { ...tool } : emptyTool());
+  }, [tool]);
 
-  if (!data) return null;
+  const categories = data?.categories;
+  const settings = data?.settings;
 
-  const { categories, settings } = data;
-  const nonAllCategories = categories.filter(c => c.id !== 'all');
+  const leafCategories = useMemo(() => {
+    const resolvedCategories = categories ?? [];
+    const parentIds = new Set(resolvedCategories.filter(item => item.parentId).map(item => item.parentId));
+    const leaves = resolvedCategories.filter(item => item.id !== 'all' && !parentIds.has(item.id));
+
+    if (form.categoryId && form.categoryId !== 'all' && !leaves.some(item => item.id === form.categoryId)) {
+      const currentCategory = resolvedCategories.find(item => item.id === form.categoryId);
+      if (currentCategory) return [...leaves, currentCategory];
+    }
+
+    return leaves;
+  }, [categories, form.categoryId]);
+
+  if (!data || !settings) return null;
 
   const update = (field: keyof Tool, value: unknown) =>
-    setForm(f => ({ ...f, [field]: value }));
+    setForm(current => ({ ...current, [field]: value }));
 
   const handleBrowse = async () => {
     let filters: { name: string; extensions: string[] }[] | undefined;
-
     switch (form.type) {
       case 'jar':
         filters = [{ name: 'JAR Files', extensions: ['jar'] }];
@@ -73,24 +90,44 @@ export default function ToolModal({ tool, initialValues, onClose }: Props) {
       case 'app':
         filters = [{ name: 'Applications', extensions: ['app'] }];
         break;
-      case 'batch':
-        filters = [{ name: 'Batch Files', extensions: ['bat', 'cmd'] }];
-        break;
       default:
         filters = undefined;
     }
 
-    const path = await selectFile(filters);
-    if (path) {
-      update('path', path);
-      // Auto-fill name from filename if empty
+    const filePath = await selectFile(filters);
+    if (filePath) {
+      update('path', filePath);
       if (!form.name) {
-        const parts = path.split('/');
-        const filename = parts[parts.length - 1];
-        const name = filename.replace(/\.[^.]+$/, '');
-        update('name', name);
+        const filename = filePath.split('/').pop() ?? filePath;
+        update('name', filename.replace(/\.[^.]+$/, ''));
       }
     }
+  };
+
+  const handleBrowseDir = async () => {
+    const dir = await selectDirectory();
+    if (dir) update('workingDirectory', dir);
+  };
+
+  const handleDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    setDragOver(false);
+    const filePath = (event.dataTransfer.files[0] as File & { path?: string })?.path;
+    if (!filePath) return;
+
+    const filename = filePath.split('/').pop() ?? filePath;
+    const name = filename.replace(/\.app$/, '').replace(/\.[^.]+$/, '');
+    const type = inferType(filePath);
+
+    let icon: string | undefined;
+    try {
+      const result = await window.launchbox.getFileIcon(filePath);
+      icon = result ?? undefined;
+    } catch {
+      icon = undefined;
+    }
+
+    setForm(current => ({ ...current, name, path: filePath, type, icon }));
   };
 
   const handleSave = async () => {
@@ -102,31 +139,50 @@ export default function ToolModal({ tool, initialValues, onClose }: Props) {
     onClose();
   };
 
-  const isEditing = !!tool?.id;
+  const isEditing = Boolean(tool?.id);
+  const showWorkingDir = form.type !== 'url' && form.type !== 'app';
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+    <div
+      className="overlay"
+      onClick={onClose}
+      onDrop={handleDrop}
+      onDragOver={event => {
+        event.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+    >
+      <div
+        className="modal"
+        style={{ width: 560, outline: dragOver ? '2px dashed var(--accent-color)' : 'none' }}
+        onClick={event => event.stopPropagation()}
+      >
         <div className="modal-header">
           <span className="modal-title">{isEditing ? '编辑工具' : '添加工具'}</span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-body">
-          {/* Tool type selector */}
+          {dragOver && (
+            <div style={{ textAlign: 'center', color: 'var(--accent-color)', fontSize: 13, padding: '8px 0' }}>
+              拖入 .app 或其他文件自动填充
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label">工具类型</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {TOOL_TYPES.map(t => (
+              {TOOL_TYPES.map(item => (
                 <button
-                  key={t.value}
-                  onClick={() => update('type', t.value)}
+                  key={item.value}
+                  onClick={() => update('type', item.value)}
                   style={{
                     padding: '6px 12px',
                     borderRadius: 8,
-                    border: `1px solid ${form.type === t.value ? 'var(--accent-color)' : 'var(--border-color)'}`,
-                    background: form.type === t.value ? 'var(--accent-color)' : 'var(--bg-input)',
-                    color: form.type === t.value ? '#fff' : 'var(--text-primary)',
+                    border: `1px solid ${form.type === item.value ? 'var(--accent-color)' : 'var(--border-color)'}`,
+                    background: form.type === item.value ? 'var(--accent-color)' : 'var(--bg-input)',
+                    color: form.type === item.value ? '#fff' : 'var(--text-primary)',
                     cursor: 'pointer',
                     fontSize: 12,
                     fontWeight: 500,
@@ -134,42 +190,55 @@ export default function ToolModal({ tool, initialValues, onClose }: Props) {
                     alignItems: 'center',
                     gap: 5,
                     transition: 'all 0.1s',
+                    fontFamily: 'inherit',
                   }}
                 >
-                  <span>{t.icon}</span> {t.label}
+                  <span>{item.icon}</span> {item.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Name & Color */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'end' }}>
             <div className="form-group">
               <label className="form-label">工具名称 *</label>
               <input
                 className="input"
                 value={form.name}
-                onChange={e => update('name', e.target.value)}
+                onChange={event => update('name', event.target.value)}
                 placeholder="输入工具名称"
               />
             </div>
             <div className="form-group">
-              <label className="form-label">颜色</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 180 }}>
-                {CARD_COLORS.map(c => (
+              <label className="form-label">颜色标签</label>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <div
+                  onClick={() => update('accentColor', undefined)}
+                  title="无颜色"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    border: '1.5px solid var(--border-color)',
+                    cursor: 'pointer',
+                    outline: !form.accentColor ? '2px solid var(--accent-color)' : 'none',
+                    outlineOffset: 2,
+                  }}
+                />
+                {ACCENT_COLORS.map(color => (
                   <div
-                    key={c}
-                    onClick={() => update('color', c)}
+                    key={color}
+                    onClick={() => update('accentColor', color)}
                     style={{
                       width: 20,
                       height: 20,
-                      borderRadius: 5,
-                      background: c,
+                      borderRadius: '50%',
+                      background: color,
                       cursor: 'pointer',
-                      outline: form.color === c ? `2px solid ${c}` : 'none',
+                      outline: form.accentColor === color ? '2px solid var(--accent-color)' : 'none',
                       outlineOffset: 2,
                       transition: 'transform 0.1s',
-                      transform: form.color === c ? 'scale(1.2)' : 'scale(1)',
+                      transform: form.accentColor === color ? 'scale(1.2)' : 'scale(1)',
                     }}
                   />
                 ))}
@@ -177,18 +246,16 @@ export default function ToolModal({ tool, initialValues, onClose }: Props) {
             </div>
           </div>
 
-          {/* Description */}
           <div className="form-group">
             <label className="form-label">描述</label>
             <input
               className="input"
               value={form.description}
-              onChange={e => update('description', e.target.value)}
+              onChange={event => update('description', event.target.value)}
               placeholder="简短描述（可选）"
             />
           </div>
 
-          {/* Path */}
           <div className="form-group">
             <label className="form-label">
               {form.type === 'url' ? 'URL 地址 *' : '文件路径 *'}
@@ -197,73 +264,83 @@ export default function ToolModal({ tool, initialValues, onClose }: Props) {
               <input
                 className="input"
                 value={form.path}
-                onChange={e => update('path', e.target.value)}
+                onChange={event => update('path', event.target.value)}
                 placeholder={form.type === 'url' ? 'https://...' : '/path/to/tool'}
                 style={{ flex: 1 }}
               />
               {form.type !== 'url' && (
-                <button className="btn btn-secondary" onClick={handleBrowse}>
-                  浏览
-                </button>
+                <button className="btn btn-secondary" onClick={handleBrowse}>浏览</button>
               )}
             </div>
           </div>
 
-          {/* Args */}
+          {showWorkingDir && (
+            <div className="form-group">
+              <label className="form-label">工作目录</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="input"
+                  value={form.workingDirectory ?? ''}
+                  onChange={event => update('workingDirectory', event.target.value || undefined)}
+                  placeholder="留空则使用文件所在目录"
+                  style={{ flex: 1 }}
+                />
+                <button className="btn btn-secondary" onClick={handleBrowseDir}>选择</button>
+              </div>
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label">启动参数</label>
             <input
               className="input"
               value={form.args}
-              onChange={e => update('args', e.target.value)}
-              placeholder="例: -Xmx2g -jar / --port 8080"
+              onChange={event => update('args', event.target.value)}
+              placeholder="例: -Xmx2g / --port 8080"
             />
           </div>
 
-          {/* Category */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="form-group">
               <label className="form-label">分类</label>
               <select
                 className="input"
                 value={form.categoryId}
-                onChange={e => update('categoryId', e.target.value)}
+                onChange={event => update('categoryId', event.target.value)}
               >
-                {nonAllCategories.map(c => (
-                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                {leafCategories.map(category => (
+                  <option key={category.id} value={category.id}>{category.icon} {category.name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Java env selector */}
             {form.type === 'jar' && settings.javaEnvs.length > 0 && (
               <div className="form-group">
                 <label className="form-label">Java 环境</label>
                 <select
                   className="input"
                   value={form.javaEnvId ?? ''}
-                  onChange={e => update('javaEnvId', e.target.value || undefined)}
+                  onChange={event => update('javaEnvId', event.target.value || undefined)}
                 >
-                  <option value="">系统默认</option>
-                  {settings.javaEnvs.map(j => (
-                    <option key={j.id} value={j.id}>{j.name}</option>
+                  <option value="">使用系统默认</option>
+                  {settings.javaEnvs.map(env => (
+                    <option key={env.id} value={env.id}>{env.name}</option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Python env selector */}
             {form.type === 'python' && settings.pythonEnvs.length > 0 && (
               <div className="form-group">
                 <label className="form-label">Python 环境</label>
                 <select
                   className="input"
                   value={form.pythonEnvId ?? ''}
-                  onChange={e => update('pythonEnvId', e.target.value || undefined)}
+                  onChange={event => update('pythonEnvId', event.target.value || undefined)}
                 >
-                  <option value="">系统默认</option>
-                  {settings.pythonEnvs.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                  <option value="">使用系统默认</option>
+                  {settings.pythonEnvs.map(env => (
+                    <option key={env.id} value={env.id}>{env.name}</option>
                   ))}
                 </select>
               </div>
@@ -273,12 +350,8 @@ export default function ToolModal({ tool, initialValues, onClose }: Props) {
 
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>取消</button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSave}
-            disabled={saving || !form.name?.trim() || !form.path?.trim()}
-          >
-            {saving ? '保存中...' : isEditing ? '保存修改' : '添加工具'}
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? '保存中...' : '保存'}
           </button>
         </div>
       </div>

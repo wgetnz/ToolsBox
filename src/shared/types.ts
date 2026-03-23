@@ -1,4 +1,5 @@
-export type ToolType = 'jar' | 'python' | 'shell' | 'executable' | 'app' | 'batch' | 'url';
+// macOS 迁移后的工具类型，移除 Windows 专有 batch
+export type ToolType = 'jar' | 'python' | 'shell' | 'executable' | 'app' | 'url';
 
 export interface JavaEnv {
   id: string;
@@ -19,12 +20,12 @@ export interface Tool {
   type: ToolType;
   path: string;
   args: string;
+  workingDirectory?: string;
   categoryId: string;
   javaEnvId?: string;
   pythonEnvId?: string;
   icon?: string;
-  color?: string;
-  customOrder: number;
+  accentColor?: string;
   lastUsed?: number;
   useCount: number;
   createdAt: number;
@@ -35,16 +36,17 @@ export interface Category {
   name: string;
   icon: string;
   order: number;
+  parentId?: string;
+  collapsed?: boolean;
 }
 
 export interface AppSettings {
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
   fontSize: 'small' | 'medium' | 'large';
   cardSize: 'small' | 'medium' | 'large';
-  backgroundColor?: string;
+  viewMode: 'grid' | 'list';
+  sidebarWidth: number;
   hoverSwitchCategories: boolean;
-  showRecentTools: boolean;
-  enableGlobalQuickLauncher: boolean;
   javaEnvs: JavaEnv[];
   pythonEnvs: PythonEnv[];
   startAtLogin: boolean;
@@ -58,35 +60,22 @@ export interface AppData {
   settings: AppSettings;
 }
 
-export interface AppLibraryEntry {
-  id: string;
-  name: string;
-  path: string;
-  icon?: string;
-  source?: 'system' | 'user';
-}
-
 export type IpcChannel =
   | 'launch-tool'
   | 'get-data'
-  | 'get-app-library'
   | 'save-tool'
   | 'delete-tool'
-  | 'delete-tools'
   | 'save-category'
   | 'delete-category'
-  | 'move-tools-to-category'
-  | 'reorder-tools-custom'
-  | 'update-tools-color'
   | 'save-settings'
   | 'get-settings'
   | 'select-file'
   | 'select-directory'
-  | 'expand-import-items'
   | 'open-in-terminal'
   | 'show-in-finder'
-  | 'create-tool-shortcut'
   | 'minimize-window'
   | 'maximize-window'
   | 'close-window'
-  | 'window-state';
+  | 'window-state'
+  | 'get-file-icon'
+  | 'native-theme-changed';

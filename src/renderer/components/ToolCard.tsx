@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Tool } from '../../shared/types';
 import { useApp } from '../store/AppContext';
-import ContextMenu, { ContextMenuItem } from './ContextMenu';
 
 const TYPE_LABELS: Record<string, string> = {
   jar: 'JAR',
@@ -9,7 +8,6 @@ const TYPE_LABELS: Record<string, string> = {
   shell: 'Shell',
   executable: 'EXE',
   app: 'App',
-  batch: 'BAT',
   url: 'URL',
 };
 
@@ -19,297 +17,216 @@ const TYPE_ICONS: Record<string, string> = {
   shell: '💻',
   executable: '⚡',
   app: '📱',
-  batch: '📜',
   url: '🌐',
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  jar: '#f89820',
-  python: '#3776ab',
-  shell: '#4eaa25',
-  executable: '#e74c3c',
-  app: '#007aff',
-  batch: '#9b59b6',
-  url: '#1abc9c',
 };
 
 interface Props {
   tool: Tool;
   size: 'small' | 'medium' | 'large';
-  customSortEnabled?: boolean;
-  customSortActive?: boolean;
-  onCustomSortStart?: () => void;
   onEdit: (tool: Tool) => void;
-  selected?: boolean;
-  onSelect?: (event: React.MouseEvent, tool: Tool) => void;
-  onRequestContextMenu?: (event: React.MouseEvent, tool: Tool) => boolean | void;
 }
 
-export default function ToolCard({
-  tool,
-  size,
-  customSortEnabled = false,
-  customSortActive = false,
-  onCustomSortStart,
-  onEdit,
-  selected = false,
-  onSelect,
-  onRequestContextMenu,
-}: Props) {
-  const { launchTool, deleteTool, openInTerminal, showInFinder, createToolShortcut } = useApp();
+export default function ToolCard({ tool, size, onEdit }: Props) {
+  const { launchTool, deleteTool, openInTerminal, showInFinder } = useApp();
   const [hover, setHover] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [iconFailed, setIconFailed] = useState(false);
-
-  const accentColor = tool.color || TYPE_COLORS[tool.type] || '#4f8ef7';
-  const hasCustomIcon = Boolean(tool.icon) && !iconFailed;
-  const isCompact = size === 'small';
-  const handleAreaSize = isCompact ? 18 : 22;
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const dims = {
-    small: { width: 106, height: 88, iconSize: 22, nameFontSize: 11 },
+    small: { width: 140, height: 110, iconSize: 28, nameFontSize: 12 },
     medium: { width: 180, height: 140, iconSize: 36, nameFontSize: 14 },
     large: { width: 220, height: 170, iconSize: 44, nameFontSize: 15 },
   }[size];
-  const iconSize = dims.iconSize;
-  const handleCustomSortStart = (event: React.MouseEvent) => {
-    if (!customSortEnabled || event.button !== 0) return;
+
+  const handleLaunch = async (event: React.MouseEvent) => {
     event.stopPropagation();
-    event.preventDefault();
-    onCustomSortStart?.();
+    if (launching) return;
+    setLaunching(true);
+    await launchTool(tool.id);
+    setLaunching(false);
   };
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    const handled = onRequestContextMenu?.(e, tool);
-    if (handled) return;
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  };
-
-  const closeContextMenu = () => setContextMenu(null);
-  const menuItems: ContextMenuItem[] = [
-    { label: '启动', icon: '▶', onClick: () => launchTool(tool.id) },
-    { label: '编辑', icon: '✏️', onClick: () => onEdit(tool) },
-  ];
-
-  if (tool.type !== 'url' && tool.type !== 'app') {
-    menuItems.push(
-      { label: '在终端中打开', icon: '💻', onClick: () => openInTerminal(tool.path) },
-      { label: '在访达中显示', icon: '📁', onClick: () => showInFinder(tool.path) }
-    );
-  }
-
-  menuItems.push(
-    { label: '创建桌面快捷方式', icon: '🔗', onClick: () => createToolShortcut(tool.id) },
-    { divider: true, label: 'divider-shortcut' },
-    { label: '删除', icon: '🗑️', danger: true, onClick: () => deleteTool(tool.id) }
-  );
 
   return (
     <>
       <div
-        data-tool-card="true"
-        data-tool-id={tool.id}
-        style={{
-          width: dims.width,
-          height: dims.height,
-          background: selected ? `${accentColor}18` : hover ? 'var(--bg-card-hover)' : 'var(--bg-card)',
-          borderRadius: isCompact ? 10 : 14,
-          border: `1px solid ${
-            selected ? accentColor : hover ? accentColor + '60' : 'var(--border-color)'
-          }`,
-          cursor: customSortEnabled ? customSortActive ? 'grabbing' : 'default' : 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: isCompact ? 6 : 8,
-          padding: isCompact ? '8px 6px' : 12,
-          position: 'relative',
-          transition: 'all 0.15s ease',
-          boxShadow: selected
-            ? `0 10px 28px ${accentColor}26`
-            : hover ? `0 8px 24px ${accentColor}20` : 'none',
-          transform: hover && !isCompact ? 'translateY(-2px)' : 'none',
-          overflow: 'hidden',
-        }}
+        ref={cardRef}
+        className="tool-card"
+        style={{ width: dims.width, height: dims.height }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
-        onClick={event => onSelect?.(event, tool)}
-        onContextMenu={handleContextMenu}
+        onDoubleClick={handleLaunch}
+        onContextMenu={event => {
+          event.preventDefault();
+          setContextMenu({ x: event.clientX, y: event.clientY });
+        }}
       >
-        {/* Top accent strip */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 3,
-          background: accentColor,
-          borderRadius: `${isCompact ? 10 : 14}px ${isCompact ? 10 : 14}px 0 0`,
-        }} />
+        {tool.accentColor && (
+          <div className="tool-card-accent" style={{ background: tool.accentColor }} />
+        )}
 
-        {/* Type badge */}
-        <div style={{
-          position: 'absolute',
-          top: isCompact ? 6 : 8,
-          right: isCompact ? 6 : 8,
-          maxWidth: `calc(100% - ${customSortEnabled ? handleAreaSize + 20 : 12}px)`,
-          background: accentColor + '22',
-          color: accentColor,
-          fontSize: isCompact ? 9 : 10,
-          fontWeight: 700,
-          padding: isCompact ? '1px 5px' : '2px 6px',
-          borderRadius: 6,
-          letterSpacing: '0.3px',
-          lineHeight: 1.2,
-        }}>
-          {TYPE_LABELS[tool.type]}
-        </div>
+        <div style={{ padding: '12px 12px 12px 16px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'absolute', top: 8, right: 8 }}>
+            <span className="type-badge">{TYPE_LABELS[tool.type]}</span>
+          </div>
 
-        {selected && (
           <div style={{
-            position: 'absolute',
-            top: 8,
-            left: 8,
-            width: isCompact ? 14 : 18,
-            height: isCompact ? 14 : 18,
-            borderRadius: 999,
-            background: accentColor,
-            color: '#fff',
-            fontSize: isCompact ? 9 : 11,
-            fontWeight: 700,
+            width: dims.iconSize + 16,
+            height: dims.iconSize + 16,
+            borderRadius: 10,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: `0 0 0 2px ${accentColor}20`,
-          }}>
-            ✓
-          </div>
-        )}
-
-        {customSortEnabled && (
-          <div
-            onClick={event => event.stopPropagation()}
-            onMouseDown={handleCustomSortStart}
-            style={{
-              position: 'absolute',
-              top: isCompact ? 6 : 8,
-              left: isCompact ? 6 : 8,
-              width: handleAreaSize,
-              height: handleAreaSize,
-              borderRadius: 6,
-              background: 'rgba(15, 23, 42, 0.28)',
-              color: 'var(--text-muted)',
-              fontSize: isCompact ? 11 : 12,
-              cursor: customSortActive ? 'grabbing' : 'grab',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              userSelect: 'none',
-            }}
-            title="拖拽调整顺序"
-          >
-            ≡
-          </div>
-        )}
-
-        {/* Icon */}
-        <div
-          onClick={event => {
-            if (!customSortEnabled) return;
-            event.stopPropagation();
-          }}
-          onMouseDown={handleCustomSortStart}
-          title={customSortEnabled ? '按住拖动图标调整顺序' : undefined}
-          style={{
-            width: isCompact ? iconSize + 8 : iconSize + 16,
-            height: isCompact ? iconSize + 8 : iconSize + 16,
-            background: accentColor + '18',
-            borderRadius: isCompact ? 10 : 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: iconSize,
-            transition: 'transform 0.15s',
-            transform: hover ? 'scale(1.05)' : 'scale(1)',
+            marginBottom: 8,
             overflow: 'hidden',
-            cursor: customSortEnabled ? customSortActive ? 'grabbing' : 'grab' : 'inherit',
-            userSelect: 'none',
-          }}
-        >
-          {hasCustomIcon ? (
-            <img
-              src={tool.icon}
-              alt={tool.name}
-              onError={() => setIconFailed(true)}
-              style={{
-                width: isCompact ? iconSize + 2 : iconSize + 6,
-                height: isCompact ? iconSize + 2 : iconSize + 6,
-                objectFit: 'contain',
-              }}
-            />
-          ) : (
-            TYPE_ICONS[tool.type]
-          )}
-        </div>
+            flexShrink: 0,
+          }}>
+            {tool.icon
+              ? <img src={tool.icon} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              : <span style={{ fontSize: dims.iconSize }}>{TYPE_ICONS[tool.type] ?? '🔧'}</span>
+            }
+          </div>
 
-        {/* Name */}
-        <div style={{
-          fontSize: dims.nameFontSize,
-          fontWeight: 600,
-          color: 'var(--text-primary)',
-          textAlign: 'center',
-          width: '100%',
-          maxWidth: '100%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: isCompact ? 'normal' : 'nowrap',
-          lineHeight: 1.3,
-          display: '-webkit-box',
-          WebkitLineClamp: isCompact ? 2 : 1,
-          WebkitBoxOrient: 'vertical',
-        }}>
-          {tool.name}
-        </div>
-
-        {/* Description */}
-        {tool.description && size !== 'small' && (
           <div style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            width: '100%',
+            fontSize: dims.nameFontSize,
+            fontWeight: 600,
+            color: 'var(--text-primary)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            lineHeight: 1.3,
           }}>
-            {tool.description}
+            {tool.name}
           </div>
-        )}
 
-        {/* Use count */}
-        {tool.useCount > 0 && !isCompact && (
-          <div style={{
-            position: 'absolute',
-            bottom: 8,
-            left: 10,
-            fontSize: 10,
-            color: 'var(--text-muted)',
-          }}>
-            {tool.useCount}次
+          {tool.description && size !== 'small' && (
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginTop: 3,
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical' as const,
+            }}>
+              {tool.description}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+            {tool.useCount > 0 && (
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{tool.useCount}次</span>
+            )}
+            {hover && (
+              <button
+                style={{
+                  marginLeft: 'auto',
+                  width: 26,
+                  height: 26,
+                  background: tool.accentColor || 'var(--accent-color)',
+                  border: 'none',
+                  borderRadius: 7,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 12,
+                  color: '#fff',
+                }}
+                onClick={handleLaunch}
+                title="启动"
+              >
+                {launching ? '⏳' : '▶'}
+              </button>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={menuItems}
-          onClose={closeContextMenu}
+          tool={tool}
+          onClose={() => setContextMenu(null)}
+          onEdit={() => {
+            setContextMenu(null);
+            onEdit(tool);
+          }}
+          onLaunch={() => {
+            setContextMenu(null);
+            void launchTool(tool.id);
+          }}
+          onDelete={() => {
+            setContextMenu(null);
+            void deleteTool(tool.id);
+          }}
+          onOpenTerminal={() => {
+            setContextMenu(null);
+            void openInTerminal(tool.path);
+          }}
+          onShowInFinder={() => {
+            setContextMenu(null);
+            void showInFinder(tool.path);
+          }}
         />
       )}
     </>
+  );
+}
+
+function ContextMenu({
+  x, y, tool, onClose, onEdit, onLaunch, onDelete, onOpenTerminal, onShowInFinder,
+}: {
+  x: number;
+  y: number;
+  tool: Tool;
+  onClose: () => void;
+  onEdit: () => void;
+  onLaunch: () => void;
+  onDelete: () => void;
+  onOpenTerminal: () => void;
+  onShowInFinder: () => void;
+}) {
+  React.useEffect(() => {
+    const handler = () => onClose();
+    window.addEventListener('click', handler);
+    window.addEventListener('contextmenu', handler);
+    return () => {
+      window.removeEventListener('click', handler);
+      window.removeEventListener('contextmenu', handler);
+    };
+  }, [onClose]);
+
+  const menuHeight = 220;
+  const adjustedY = y + menuHeight > window.innerHeight ? y - menuHeight : y;
+
+  return (
+    <div
+      className="context-menu glass"
+      style={{ left: x, top: adjustedY }}
+      onClick={event => event.stopPropagation()}
+    >
+      <div className="context-menu-item" onClick={onLaunch}>
+        <span>▶</span> 启动
+      </div>
+      <div className="context-menu-item" onClick={onEdit}>
+        <span>✏️</span> 编辑
+      </div>
+      {tool.type !== 'url' && (
+        <>
+          <div className="context-menu-item" onClick={onOpenTerminal}>
+            <span>💻</span> 在终端中打开
+          </div>
+          <div className="context-menu-item" onClick={onShowInFinder}>
+            <span>📁</span> 在访达中显示
+          </div>
+        </>
+      )}
+      <div className="context-menu-divider" />
+      <div className="context-menu-item danger" onClick={onDelete}>
+        <span>🗑️</span> 删除
+      </div>
+    </div>
   );
 }

@@ -64,6 +64,11 @@ body.light {
   --scrollbar-track: #f5f6fa;
 }
 
+.glass {
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
 #root {
   width: 100vw;
   height: 100vh;
@@ -312,6 +317,126 @@ textarea.input {
 
 .empty-state p {
   font-size: 13px;
+}
+
+.tool-card {
+  position: relative;
+  display: flex;
+  border-radius: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.tool-card:hover {
+  transform: translateY(-2px);
+  background: var(--bg-card-hover);
+}
+
+.tool-card:active {
+  transform: scale(0.98);
+}
+
+.tool-card-accent {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.tool-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.sidebar-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.sidebar-item.active {
+  background: var(--accent-color);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sidebar-disclosure {
+  width: 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.top-category-tab,
+.sub-category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.12s ease;
+}
+
+.top-category-tab:hover,
+.sub-category-tab:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.top-category-tab.active,
+.sub-category-tab.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #fff;
+  font-weight: 600;
 }
 
 /* Context menu */

@@ -1,12 +1,6 @@
-import { spawn, exec } from 'child_process';
+import { spawn, execFile } from 'child_process';
 import * as path from 'path';
 import { Tool, AppSettings } from '../shared/types';
-
-function getPlatform(): 'mac' | 'win' | 'linux' {
-  if (process.platform === 'darwin') return 'mac';
-  if (process.platform === 'win32') return 'win';
-  return 'linux';
-}
 
 export function parseArgs(input: string): string[] {
   const args: string[] = [];
@@ -56,90 +50,82 @@ export function parseArgs(input: string): string[] {
   return args;
 }
 
-export function buildCommand(tool: Tool, settings: AppSettings): { cmd: string; args: string[]; opts: object } {
-  const platform = getPlatform();
+function resolveCwd(tool: Tool): string | undefined {
+  if (tool.type === 'app' || tool.type === 'url') return undefined;
+  if (tool.workingDirectory?.trim()) return tool.workingDirectory.trim();
+  if (tool.path && !tool.path.startsWith('http')) return path.dirname(tool.path);
+  return undefined;
+}
+
+export function buildCommand(
+  tool: Tool,
+  settings: AppSettings
+): { cmd: string; args: string[]; opts: object } {
+  const cwd = resolveCwd(tool);
   const extraArgs = tool.args ? parseArgs(tool.args) : [];
 
   switch (tool.type) {
     case 'jar': {
       let javaPath = 'java';
       if (tool.javaEnvId) {
-        const jenv = settings.javaEnvs.find(j => j.id === tool.javaEnvId);
-        if (jenv) {
-          javaPath = platform === 'win'
-            ? path.join(jenv.path, 'bin', 'java.exe')
-            : path.join(jenv.path, 'bin', 'java');
-        }
+        const env = settings.javaEnvs.find(item => item.id === tool.javaEnvId);
+        if (env) javaPath = path.join(env.path, 'bin', 'java');
       }
       return {
         cmd: javaPath,
         args: ['-jar', tool.path, ...extraArgs],
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
     }
 
     case 'python': {
       let pythonPath = 'python3';
       if (tool.pythonEnvId) {
-        const penv = settings.pythonEnvs.find(p => p.id === tool.pythonEnvId);
-        if (penv) {
-          pythonPath = platform === 'win'
-            ? path.join(penv.path, 'python.exe')
-            : path.join(penv.path, 'bin', 'python3');
-        }
+        const env = settings.pythonEnvs.find(item => item.id === tool.pythonEnvId);
+        if (env) pythonPath = path.join(env.path, 'bin', 'python3');
       }
       return {
         cmd: pythonPath,
         args: [tool.path, ...extraArgs],
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
     }
 
-    case 'shell': {
-      if (platform === 'win') {
-        return { cmd: 'cmd.exe', args: ['/c', tool.path, ...extraArgs], opts: {} };
-      }
+    case 'shell':
       return {
         cmd: '/bin/bash',
         args: [tool.path, ...extraArgs],
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
       };
-    }
 
-    case 'executable': {
+    case 'app':
+      return {
+        cmd: 'open',
+        args: extraArgs.length > 0 ? [tool.path, '--args', ...extraArgs] : [tool.path],
+        opts: {},
+      };
+
+    case 'executable':
       return {
         cmd: tool.path,
         args: extraArgs,
-        opts: { cwd: path.dirname(tool.path) },
+        opts: { cwd },
+      };
+
+    case 'url': {
+      let url = tool.path;
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
+        url = `https://${url}`;
+      }
+      return {
+        cmd: 'open',
+        args: [url],
+        opts: {},
       };
     }
 
-    case 'app': {
-      if (platform === 'mac') {
-        return {
-          cmd: 'open',
-          args: extraArgs.length > 0 ? ['-a', tool.path, '--args', ...extraArgs] : ['-a', tool.path],
-          opts: {},
-        };
-      }
-      return { cmd: tool.path, args: extraArgs, opts: {} };
-    }
-
-    case 'batch': {
-      if (platform === 'win') {
-        return { cmd: 'cmd.exe', args: ['/c', tool.path, ...extraArgs], opts: {} };
-      }
-      return { cmd: '/bin/bash', args: [tool.path, ...extraArgs], opts: {} };
-    }
-
-    case 'url': {
-      if (platform === 'mac') return { cmd: 'open', args: [tool.path], opts: {} };
-      if (platform === 'win') return { cmd: 'start', args: ['', tool.path], opts: { shell: true } };
-      return { cmd: 'xdg-open', args: [tool.path], opts: {} };
-    }
-
     default:
-      throw new Error(`Unknown tool type: ${tool.type}`);
+      throw new Error(`Unsupported tool type on macOS: ${(tool as { type: string }).type}`);
   }
 }
 
@@ -147,44 +133,40 @@ export function launchTool(tool: Tool, settings: AppSettings): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
       const { cmd, args, opts } = buildCommand(tool, settings);
-      console.log(`Launching: ${cmd} ${args.join(' ')}`);
-
       const proc = spawn(cmd, args, {
         detached: true,
         stdio: 'ignore',
         ...(opts as object),
       });
 
+      proc.on('error', reject);
       proc.unref();
       resolve();
-    } catch (err) {
-      reject(err);
+    } catch (error) {
+      reject(error);
     }
   });
 }
 
 export function openInTerminal(dirPath: string): void {
-  const platform = getPlatform();
   const dir = path.isAbsolute(dirPath) ? dirPath : path.dirname(dirPath);
+  const escaped = dir.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const script = `
+set thePath to "${escaped}"
+tell application "Terminal" to activate
+tell application "Terminal"
+  if (count of windows) = 0 then
+    do script "cd " & quoted form of thePath
+  else
+    do script "cd " & quoted form of thePath in front window
+  end if
+end tell
+`.trim();
 
-  if (platform === 'mac') {
-    exec(`open -a Terminal "${dir}"`);
-  } else if (platform === 'win') {
-    exec(`start cmd.exe /k "cd /d "${dir}""`);
-  } else {
-    const terminals = ['gnome-terminal', 'xterm', 'konsole', 'xfce4-terminal'];
-    const term = terminals[0];
-    exec(`${term} --working-directory="${dir}"`);
-  }
+  const proc = spawn('osascript', ['-'], { stdio: ['pipe', 'ignore', 'ignore'] });
+  proc.stdin?.end(script, 'utf8');
 }
 
 export function showInFinder(filePath: string): void {
-  const platform = getPlatform();
-  if (platform === 'mac') {
-    exec(`open -R "${filePath}"`);
-  } else if (platform === 'win') {
-    exec(`explorer /select,"${filePath}"`);
-  } else {
-    exec(`xdg-open "${path.dirname(filePath)}"`);
-  }
+  execFile('open', ['-R', filePath]);
 }

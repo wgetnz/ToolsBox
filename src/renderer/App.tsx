@@ -6,49 +6,30 @@ import MainContent from './components/MainContent';
 import ToolModal from './components/ToolModal';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
-import AppLibraryModal from './components/AppLibraryModal';
-import QuickLauncherModal from './components/QuickLauncherModal';
 
 export default function App() {
   const { data } = useApp();
   const [showAddTool, setShowAddTool] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showAppLibrary, setShowAppLibrary] = useState(false);
-  const [showQuickLauncher, setShowQuickLauncher] = useState(false);
-  const settings = data?.settings;
 
-  // Apply theme and settings to document
   useEffect(() => {
-    if (!settings) return;
-    const { theme, fontSize, backgroundColor } = settings;
-
-    document.body.className = theme;
-
+    if (!data) return;
+    const { theme, fontSize } = data.settings;
     const fontSizeMap = { small: '12px', medium: '14px', large: '16px' };
     document.documentElement.style.fontSize = fontSizeMap[fontSize];
 
-    if (backgroundColor) {
-      document.documentElement.style.setProperty('--bg-primary', backgroundColor);
-    } else {
-      document.documentElement.style.removeProperty('--bg-primary');
-    }
-  }, [settings]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setShowQuickLauncher(open => !open);
-      }
+    const applyTheme = (isDark: boolean) => {
+      document.body.className = isDark ? 'dark' : 'light';
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+    if (theme === 'system') {
+      applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
+      return window.launchbox.onNativeThemeChanged(applyTheme);
+    }
 
-  useEffect(() => window.launchbox.onOpenQuickLauncher(() => {
-    setShowQuickLauncher(true);
-  }), []);
+    applyTheme(theme === 'dark');
+    return undefined;
+  }, [data?.settings.theme, data?.settings.fontSize, data]);
 
   if (!data) {
     return (
@@ -72,7 +53,6 @@ export default function App() {
       <TitleBar
         onAddTool={() => setShowAddTool(true)}
         onOpenSettings={() => setShowSettings(true)}
-        onOpenAppLibrary={() => setShowAppLibrary(true)}
       />
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <Sidebar />
@@ -85,31 +65,6 @@ export default function App() {
 
       {showSettings && (
         <SettingsPanel onClose={() => setShowSettings(false)} />
-      )}
-
-      {showAppLibrary && (
-        <AppLibraryModal
-          defaultCategoryId="misc"
-          onClose={() => setShowAppLibrary(false)}
-        />
-      )}
-
-      {showQuickLauncher && (
-        <QuickLauncherModal
-          onClose={() => setShowQuickLauncher(false)}
-          onAddTool={() => {
-            setShowQuickLauncher(false);
-            setShowAddTool(true);
-          }}
-          onOpenSettings={() => {
-            setShowQuickLauncher(false);
-            setShowSettings(true);
-          }}
-          onOpenAppLibrary={() => {
-            setShowQuickLauncher(false);
-            setShowAppLibrary(true);
-          }}
-        />
       )}
 
       <Toast />

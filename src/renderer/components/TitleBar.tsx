@@ -3,10 +3,9 @@ import React from 'react';
 interface Props {
   onOpenSettings: () => void;
   onAddTool: () => void;
-  onOpenAppLibrary: () => void;
 }
 
-export default function TitleBar({ onOpenSettings, onAddTool, onOpenAppLibrary }: Props) {
+export default function TitleBar({ onOpenSettings, onAddTool }: Props) {
   const dragStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties;
   const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
   const isMac = navigator.userAgent.includes('Mac');
@@ -60,13 +59,7 @@ export default function TitleBar({ onOpenSettings, onAddTool, onOpenAppLibrary }
 
       <div style={{ flex: 1 }} />
 
-      {/* Actions */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        ...noDragStyle,
-      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, ...noDragStyle }}>
         <button
           className="btn btn-primary"
           onClick={onAddTool}
@@ -79,13 +72,6 @@ export default function TitleBar({ onOpenSettings, onAddTool, onOpenAppLibrary }
           } : { fontSize: 12, padding: '6px 14px' }}
         >
           <span>+</span> 添加工具
-        </button>
-        <button
-          className="btn btn-secondary"
-          onClick={onOpenAppLibrary}
-          style={isMac ? macButtonStyle : { fontSize: 12, padding: '6px 14px' }}
-        >
-          <span>📚</span> 应用库
         </button>
         <button
           className="btn btn-ghost btn-icon"
