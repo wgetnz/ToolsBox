@@ -26,6 +26,7 @@ export default function MainContent() {
   const [editingTool, setEditingTool] = useState<Tool | null | undefined>(undefined);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortAsc, setSortAsc] = useState(true);
+  const hoverTimerRef = React.useRef<number | null>(null);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -103,6 +104,12 @@ export default function MainContent() {
     });
   }, [data, searchQuery, selectedCategoryIds, sortAsc, sortKey]);
 
+  useEffect(() => () => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+  }, []);
+
   if (!data) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -112,9 +119,27 @@ export default function MainContent() {
   }
 
   const cardSize = data.settings.cardSize;
+  const hoverSwitchCategories = data.settings.hoverSwitchCategories;
   const categoryName = selectedCategoryId === 'all'
     ? '全部工具'
     : data.categories.find(category => category.id === selectedCategoryId)?.name ?? '工具';
+
+  const scheduleHoverSelect = (categoryId: string) => {
+    if (!hoverSwitchCategories) return;
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+    hoverTimerRef.current = window.setTimeout(() => {
+      selectCategory(categoryId);
+    }, 120);
+  };
+
+  const clearHoverSelect = () => {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -131,6 +156,8 @@ export default function MainContent() {
           <button
             className={`top-category-tab lily-top-tab${selectedCategoryId === 'all' ? ' active' : ''}`}
             onClick={() => selectCategory('all')}
+            onMouseEnter={() => scheduleHoverSelect('all')}
+            onMouseLeave={clearHoverSelect}
           >
             全部工具
           </button>
@@ -139,6 +166,8 @@ export default function MainContent() {
               key={category.id}
               className={`top-category-tab lily-top-tab${activeTopCategoryId === category.id ? ' active' : ''}`}
               onClick={() => selectCategory(category.id)}
+              onMouseEnter={() => scheduleHoverSelect(category.id)}
+              onMouseLeave={clearHoverSelect}
             >
               {category.name}
             </button>

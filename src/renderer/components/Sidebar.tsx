@@ -86,11 +86,6 @@ export default function Sidebar() {
     ? (categoryChildren.get(activeTopCategoryId) ?? [])
     : [];
 
-  const recentTools = [...tools]
-    .filter(tool => tool.lastUsed)
-    .sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0))
-    .slice(0, 5);
-
   const startResize = useCallback((event: React.MouseEvent) => {
     if (!settings) return;
     event.preventDefault();
@@ -268,29 +263,6 @@ export default function Sidebar() {
           + 添加分类
         </button>
 
-        {recentTools.length > 0 && (
-          <>
-            <div className="lily-sidebar-section-title" style={{ marginTop: 14 }}>
-              最近使用
-            </div>
-
-            {recentTools.map(tool => (
-              <div key={tool.id} className="sidebar-item" onClick={() => selectCategory(tool.categoryId)}>
-                {tool.icon
-                  ? <img src={tool.icon} width={16} height={16} style={{ borderRadius: 3, objectFit: 'contain' }} />
-                  : <span style={{ fontSize: 14 }}>{getToolTypeIcon(tool.type)}</span>
-                }
-                <span style={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontSize: 13,
-                }}>{tool.name}</span>
-              </div>
-            ))}
-          </>
-        )}
       </div>
 
       <div
@@ -380,16 +352,4 @@ function CategoryItem({
       )}
     </div>
   );
-}
-
-function getToolTypeIcon(type: string): string {
-  const map: Record<string, string> = {
-    jar: '☕',
-    python: '🐍',
-    shell: '💻',
-    executable: '⚡',
-    app: '📱',
-    url: '🌐',
-  };
-  return map[type] ?? '🔧';
 }
