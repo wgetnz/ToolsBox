@@ -33,8 +33,18 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Build app bundles
+        run: npm run build
+
       - name: Build unsigned test package
         run: npx electron-builder --mac zip dmg --publish never
+
+      - name: Verify packaged renderer assets
+        run: |
+          APP_PATH="$(find dist -maxdepth 2 -type d -name '*.app' | head -n 1)"
+          test -n "$APP_PATH"
+          npx asar list "$APP_PATH/Contents/Resources/app.asar" | grep '^/dist/renderer/index.html$'
+          npx asar list "$APP_PATH/Contents/Resources/app.asar" | grep '^/dist/renderer/bundle.js$'
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v6
